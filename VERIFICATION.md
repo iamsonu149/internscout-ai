@@ -30,3 +30,11 @@ Added separate persistence and synchronization for partially matching excluded l
 ## Live credentials check (2026-09-25)
 
 After the user saved the Firecrawl key, a real pipeline run with one query and a maximum of two scrapes completed without errors. It discovered five search results, excluded all five in pre-scrape filtering, and inserted no jobs into either tab. Both tab syncs completed. A separate small integration probe returned one Firecrawl search result and successfully scraped its ATS page; that page had no single extractable JobPosting, so no job was inferred or exported. Google Sheets read access also passed. This establishes live search, scrape and sheet connectivity, but does not demonstrate a successfully verified job or a populated opportunity row yet.
+
+## GitHub automation deployed (2026-09-25)
+
+Private repository: https://github.com/iamsonu149/internscout-ai . Default branch: `main`. Both workflows are active. The daily schedule is `30 3 * * *` (09:00 IST). Firecrawl and Google credentials were configured as encrypted Actions secrets, not committed files.
+
+The first cloud discovery run succeeded: https://github.com/iamsonu149/internscout-ai/actions/runs/36087067304 . It ran 3 searches, discovered 15 results, scraped 8 pages, filtered 13 results, verified/matched 1 job, and inserted 1 opportunity plus 1 rejected match, with 0 errors. Both Google Sheet tabs were subsequently read back: each contained 1 job row and the expected headers. SQLite cache save also succeeded. This supersedes the initial no-credential/no-populated-row limitations above.
+
+The GitHub tests workflow also passed: https://github.com/iamsonu149/internscout-ai/actions/runs/36087071310 . This was a manual workflow dispatch; the scheduled trigger is configured and active, but a future cron-triggered run has not yet been observed. GitHub may delay scheduled runs.
