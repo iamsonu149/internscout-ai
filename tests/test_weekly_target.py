@@ -19,4 +19,4 @@ def test_weekly_target_excludes_stale_weak_expired_and_ineligible():
         row | {"last_seen": "2026-09-01T00:00:00+00:00"},
     ]
     result = weekly_progress(rows, {"graduation_year": 2027}, now)
-    assert result == {"weekly_strong_matches": 1, "weekly_target": 14, "weekly_shortfall": 13}
+    assert result == {"weekly_strong_matches": 1, "weekly_target": 20, "weekly_shortfall": 19}

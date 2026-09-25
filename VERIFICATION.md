@@ -61,3 +61,8 @@ Deployed at https://internscout-ai-psi.vercel.app using Python 3.13 and Vercel F
 ## Compact sheet layout (2026-09-25)
 
 Removed Relevant Projects, Source, Application URL and Notes from both live tabs after a private local backup. Native column deletion preserved retained values, Status validation and formatting. Rejected Matches now displays Last Evaluated (UTC) as YYYY-MM-DD HH:MM. The dashboard reads by header name and uses Job URL when Application URL is absent. The reduced writer preserves Status and Date Found and deduplicates by Job URL/fingerprint. All 54 tests and Ruff checks pass. Production deployment succeeded; authenticated live opportunity and screened-out views returned 200 with existing rows, job links and no Sheets error. Both live headers pass sync initialization without writes. Formatting was inspected through cell metadata; no browser visual inspection was performed.
+
+## Paid-only internships and weekly target 20 (2026-09-25)
+
+70 tests pass. Added explicit pay-evidence screening, rejection of unknown/unpaid/conditional pay, positive structured salary checks, internship-only checks for paid full-time jobs, sheet export protection against old unknown-pay records, and dashboard screening of unknown-pay history. Broadened technical role queries while retaining score 80, verification, geography and graduation rules. Weekly progress now targets 20; no budget increase or paid discovery run was triggered. Existing sheet rows remain as history.
+

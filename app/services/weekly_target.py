@@ -25,4 +25,4 @@ def weekly_progress(jobs, profile, now=None):
                 count += 1
         except (ValueError, TypeError, KeyError):
             continue
-    return {"weekly_strong_matches": count, "weekly_target": 14, "weekly_shortfall": max(0, 14 - count)}
+    return {"weekly_strong_matches": count, "weekly_target": 20, "weekly_shortfall": max(0, 20 - count)}

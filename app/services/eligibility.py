@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
+from app.services.compensation import PAY_REASON, paid_evidence
+
 
 @dataclass
 class Eligibility:
@@ -22,10 +24,12 @@ def evaluate(job, profile, today=None):
     )
     title = job.title.lower()
     reasons, concerns = [], []
+    if not paid_evidence(job.salary_or_stipend, job.description):
+        reasons.append(PAY_REASON)
     if not re.search(r"\bintern(?:ship)?\b", title + " " + (job.employment_type or ""), re.I):
         reasons.append("Not explicitly an internship")
     if not re.search(
-        r"software|backend|back.end|python|\bsde\b|machine learning|data scien|data engineer|ai/ml|\bml\b",
+        r"software|backend|back.end|front[ -]?end|full[ -]?stack|web develop|mobile develop|python|\bsde\b|machine learning|data scien|data engineer|data analy|ai/ml|\bml\b|\bqa\b|quality assurance|test engineer|devops|cloud engineer|cybersecurity",
         title,
     ):
         reasons.append("Outside target technical roles")

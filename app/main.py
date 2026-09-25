@@ -60,7 +60,7 @@ def main():
                 with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
                     summary.write(
                         f"## Weekly quality target\n\n"
-                        f"{result['weekly_strong_matches']} / 14 strong matches first discovered in the last 7 days. "
+                        f"{result['weekly_strong_matches']} / {result['weekly_target']} paid strong matches first discovered in the last 7 days. "
                         f"Shortfall: {result['weekly_shortfall']}. Quality filters are never relaxed.\n\n"
                         f"This run: {result['queries']} searches, {result['scraped']} scrape attempts, "
                         f"{result['added']} new matches, {result['errors']} errors.\n"

@@ -7,6 +7,7 @@ def job(**overrides):
     values = dict(
         title="Backend Engineer Intern",
         company="Acme",
+        salary_or_stipend="INR 25,000 per month",
         source_url="https://jobs.lever.co/acme/123",
         application_url="https://jobs.lever.co/acme/123/apply",
         location="India",

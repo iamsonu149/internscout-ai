@@ -7,6 +7,7 @@ from pathlib import Path
 from flask import Flask, abort, redirect, render_template, request, session, url_for
 
 from app.database.repository import STATUSES, Repository
+from app.services.compensation import PAY_REASON, paid_evidence
 from app.services.dashboard_feed import SheetDashboardFeed
 from app.services.verifier import EXPORTABLE
 
@@ -105,6 +106,17 @@ def create_app(settings, sheet_feed=None):
         cloud = feed.read(force=request.args.get("refresh") == "1") if feed else None
         all_jobs = cloud["jobs"] if cloud else repo.jobs()
         rejected_jobs = cloud["rejected"] if cloud else repo.rejections()
+        # Apply current pay policy to historic/manual rows as well as new discoveries.
+        paid_jobs = []
+        rejected_urls = {j.get("source_url") for j in rejected_jobs}
+        for job in all_jobs:
+            if paid_evidence(job.get("salary_or_stipend"), job.get("description", "")):
+                paid_jobs.append(job)
+            elif job.get("source_url") not in rejected_urls:
+                job["rejection_reasons"] = [PAY_REASON]
+                job["decision"] = "PAY UNCONFIRMED / EXCLUDED"
+                rejected_jobs.append(job)
+        all_jobs = paid_jobs
         cutoff = (datetime.now(timezone.utc) - timedelta(days=settings.recheck_days)).isoformat()
         for job in all_jobs + rejected_jobs:
             job.setdefault("status", "NEW")

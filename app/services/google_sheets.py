@@ -9,6 +9,7 @@ from google.auth.transport.requests import AuthorizedSession
 from google.oauth2 import credentials, service_account
 
 from app.models import Job
+from app.services.compensation import PAY_REASON, paid_evidence
 from app.services.deduplicator import fingerprint, normalize_url
 from app.services.http import ProviderError
 from app.services.verifier import EXPORTABLE
@@ -236,6 +237,9 @@ class GoogleSheets:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=self.settings.recheck_days)).isoformat()
         for item in items:
             row = sheet_row(item)
+            paid = bool(paid_evidence(item.get("salary_or_stipend"), item.get("description", "")))
+            if not paid:
+                row[7] = PAY_REASON
             fresh = item["last_seen"] >= cutoff
             expired = False
             if item.get("deadline"):
@@ -268,6 +272,7 @@ class GoogleSheets:
                 and item["match"]["match_score"] >= self.settings.min_match_score
                 and fresh
                 and not expired
+                and paid
             ):
                 writes.append({"range": f"{self.tab}!A{next_row}:O{next_row}", "values": [row]})
                 urls[key] = (next_row, row)

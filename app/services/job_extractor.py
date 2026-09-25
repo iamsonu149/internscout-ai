@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from app.models import Job
+from app.services.compensation import paid_evidence
 
 
 def plain(value):
@@ -43,6 +44,7 @@ def location_text(value):
 
 
 def enrich(job):
+    job.salary_or_stipend = paid_evidence(job.salary_or_stipend, job.description) or job.salary_or_stipend
     sentences = re.split(r"[\n.;]", job.description)
     job.graduation_requirement = job.graduation_requirement or next(
         (
