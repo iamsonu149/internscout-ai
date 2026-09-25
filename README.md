@@ -124,7 +124,7 @@ Firecrawl Search uses `/v2/search` with web results and no automatic scrape opti
 
 ## Public ATS sources and official domains
 
-`sources.json` includes six employer boards: Razorpay, Sarvam AI, Supabase, Deepgram, Browserbase and Instabase. Each mapping records its official careers-page evidence and verification date. These direct API reads do not use Firecrawl credits. Add boards only after verifying them via the company's official website:
+`sources.json` includes five live employer boards: Razorpay, Sarvam AI, Supabase, Deepgram and Browserbase. Each mapping records its official careers-page evidence and verification date. These direct API reads do not use Firecrawl credits. Add boards only after verifying them via the company's official website:
 
 ```json
 {
@@ -345,3 +345,5 @@ The SQLite credit ledger atomically reserves credits before each paid request. N
 An authenticated [account credit-balance check](https://docs.firecrawl.dev/api-reference/endpoint/credit-usage) must succeed before the first paid request. Missing history in GitHub Actions blocks discovery rather than resetting the budget. The cache must be retained: deleting it, independent machines, other Firecrawl tools, or a process crash before cloud cache persistence are outside the ledger's guarantees. No API keys or provider response bodies are written to the ledger or report.
 
 Each cloud run includes a weekly summary and a downloadable `weekly-report.json` artifact: unique strong matches, confirmed/undisclosed pay, target shortfall, rejection reasons, closure checks, conservative budget usage and provider-reported charges. Paid budget exhaustion does not prevent direct company feeds or Sheet synchronization. A failed source is reported as partial coverage.
+
+Instabase remains in an unavailable-board audit entry because its officially linked Greenhouse API returned 404. Firecrawl 401/402/403/429 responses stop further paid requests for that run. ATS application-page aliases are normalized to the job-detail URL, board indexes are excluded, and clearly foreign-only search snippets are screened before scraping.

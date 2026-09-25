@@ -27,7 +27,12 @@ def normalize_url(url):
         if not k.lower().startswith("utm_")
         and k.lower() not in {"source", "ref", "referrer", "fbclid", "gclid"}
     ]
-    return urlunsplit((parts.scheme, host, parts.path.rstrip("/") or "/", urlencode(sorted(query)), ""))
+    path = parts.path.rstrip("/") or "/"
+    if host in {"jobs.lever.co", "jobs.eu.lever.co", "jobs.ashbyhq.com"}:
+        path = re.sub(r"/(?:apply|application)$", "", path)
+    if host in {"boards.greenhouse.io", "job-boards.greenhouse.io"}:
+        query = [(k, v) for k, v in query if k.lower() not in {"gh_jid", "gh_src"}]
+    return urlunsplit((parts.scheme, host, path, urlencode(sorted(query)), ""))
 
 
 def words(value):

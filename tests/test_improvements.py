@@ -142,3 +142,30 @@ def test_availability_and_degree_restrictions():
     assert not evaluate(job(description="BTech only."), profile).accepted
     assert not evaluate(job(description="Start date: 2026-09-01."), profile).accepted
     assert evaluate(job(description="Bachelor in Computer Science or related field."), profile).accepted
+
+
+def test_rate_limit_stops_subsequent_paid_calls():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(429)
+
+    service = Firecrawl("fake", Http(httpx.Client(transport=httpx.MockTransport(handler))))
+    with pytest.raises(ProviderError):
+        service.search("intern")
+    with pytest.raises(BudgetExceeded):
+        service.scrape("https://jobs.lever.co/acme/1")
+    assert len(calls) == 1
+
+
+def test_ats_aliases_do_not_trigger_duplicate_scrapes():
+    from app.services.deduplicator import normalize_url
+
+    assert normalize_url("https://jobs.lever.co/acme/id/apply") == normalize_url(
+        "https://jobs.lever.co/acme/id"
+    )
+    assert (
+        normalize_url("https://boards.greenhouse.io/acme/jobs/1?gh_jid=1&gh_src=tracking")
+        == "https://boards.greenhouse.io/acme/jobs/1"
+    )

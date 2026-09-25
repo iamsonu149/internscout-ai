@@ -118,12 +118,26 @@ class Pipeline:
                                 continue
                             seen.add(url)
                             host = urlsplit(url).hostname
+                            # Index/search pages cannot identify a single posting.
+                            segments = [p for p in urlsplit(url).path.split("/") if p]
+                            if host in ATS_HOSTS and len(segments) < 2:
+                                metrics["filtered"] += 1
+                                continue
                             # Exclude unknown/aggregator domains before spending scrape credits.
                             if host not in ATS_HOSTS and host not in self.sources.get("official_domains", {}):
                                 metrics["filtered"] += 1
                                 continue
                             hint = result.get("title", "") + " " + result.get("description", "") + " " + url
                             if not re.search(r"intern", hint, re.I):
+                                metrics["filtered"] += 1
+                                continue
+                            if re.search(
+                                r"United States|\bUSA\b|New York|San Francisco|Palo Alto|London|Singapore|US.only",
+                                hint,
+                                re.I,
+                            ) and not re.search(
+                                r"India|Bengaluru|Bangalore|Hyderabad|worldwide|global remote", hint, re.I
+                            ):
                                 metrics["filtered"] += 1
                                 continue
                             urls.append(url)

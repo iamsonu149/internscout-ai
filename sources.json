@@ -34,14 +34,17 @@
       "slug": "browserbase",
       "verified_from": "https://www.browserbase.com/careers",
       "verified_on": "2026-09-25"
-    },
+    }
+  ],
+  "official_domains": {},
+  "unavailable_boards": [
     {
       "type": "greenhouse",
       "slug": "instabase",
       "company": "Instabase",
       "verified_from": "https://www.instabase.com/careers/jobs",
-      "verified_on": "2026-09-25"
+      "verified_on": "2026-09-25",
+      "reason": "Official link exists but public API returned 404 on 2026-09-25"
     }
-  ],
-  "official_domains": {}
+  ]
 }

@@ -1,6 +1,11 @@
 name: Internship discovery four days weekly
 on:
   workflow_dispatch:
+    inputs:
+      free_sources_only:
+        description: Check direct company feeds and saved postings without Firecrawl
+        type: boolean
+        default: false
   schedule:
     # Monday, Wednesday, Friday, Sunday at 09:00 India Standard Time.
     - cron: '30 3 * * 0,1,3,5'
@@ -19,7 +24,7 @@ jobs:
       GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
       GOOGLE_SHEET_TAB: ${{ vars.GOOGLE_SHEET_TAB || 'Opportunities' }}
       GOOGLE_REJECTED_SHEET_TAB: ${{ vars.GOOGLE_REJECTED_SHEET_TAB || 'Rejected Matches' }}
-      MAX_QUERIES: ${{ vars.MAX_QUERIES || '8' }}
+      MAX_QUERIES: ${{ inputs.free_sources_only && '0' || vars.MAX_QUERIES || '8' }}
       MAX_SCRAPES: ${{ vars.MAX_SCRAPES || '24' }}
       RESULTS_PER_QUERY: ${{ vars.RESULTS_PER_QUERY || '10' }}
       WEEKLY_CREDIT_LIMIT: '400'

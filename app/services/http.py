@@ -6,6 +6,10 @@ import httpx
 class ProviderError(RuntimeError):
     """Sanitized error: never includes request headers or provider response bodies."""
 
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class Http:
     def __init__(self, client=None, sleep=time.sleep):
@@ -27,7 +31,7 @@ class Http:
                     self.sleep(min(float(delay), 30) if delay.isdigit() else 2**attempt)
                     continue
             if not 200 <= response.status_code < 300:
-                raise ProviderError(f"Provider HTTP {response.status_code}")
+                raise ProviderError(f"Provider HTTP {response.status_code}", response.status_code)
             try:
                 data = response.json()
             except ValueError:

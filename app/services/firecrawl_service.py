@@ -36,6 +36,7 @@ class Firecrawl:
         self.http = http or Http()
         self.budget = budget
         self.account_available = None
+        self.stopped = False
 
     def account_credits(self):
         result = self.http.json(
@@ -51,6 +52,8 @@ class Firecrawl:
         return value
 
     def _call(self, endpoint, payload):
+        if self.stopped:
+            raise BudgetExceeded("Paid requests stopped after provider quota/auth/rate-limit response")
         if not self.key:
             raise ProviderError("FIRECRAWL_API_KEY is not configured")
         cost = 2 * math.ceil(payload["limit"] / 10) if endpoint == "search" else 1
@@ -62,13 +65,18 @@ class Firecrawl:
                 raise BudgetExceeded("Insufficient verified account credit balance")
             reservation = self.budget.reserve(endpoint, cost)
             self.account_available -= cost
-        result = self.http.json(
-            "POST",
-            f"https://api.firecrawl.dev/v2/{endpoint}",
-            headers={"Authorization": f"Bearer {self.key}"},
-            json=payload,
-            attempts=1,  # A timed-out paid POST may already have consumed credits.
-        )
+        try:
+            result = self.http.json(
+                "POST",
+                f"https://api.firecrawl.dev/v2/{endpoint}",
+                headers={"Authorization": f"Bearer {self.key}"},
+                json=payload,
+                attempts=1,  # A timed-out paid POST may already have consumed credits.
+            )
+        except ProviderError as exc:
+            if exc.status_code in (401, 402, 403, 429):
+                self.stopped = True
+            raise
         if not isinstance(result, dict) or result.get("success") is not True:
             raise ProviderError("Firecrawl request was unsuccessful")
         if reservation is not None:
