@@ -5,10 +5,11 @@ from pathlib import Path
 from flask import Flask, abort, redirect, render_template, request, session, url_for
 
 from app.database.repository import STATUSES, Repository
+from app.services.dashboard_feed import SheetDashboardFeed
 from app.services.verifier import EXPORTABLE
 
 
-def create_app(settings):
+def create_app(settings, sheet_feed=None):
     app = Flask(__name__)
     app.secret_key = secrets.token_hex(32)
     app.config.update(
@@ -18,6 +19,7 @@ def create_app(settings):
         TRUSTED_HOSTS=["127.0.0.1", "localhost"],
     )
     repo = Repository(settings.database_path)
+    feed = sheet_feed or (SheetDashboardFeed(settings) if settings.sheet_id else None)
 
     @app.before_request
     def local_only():
@@ -38,26 +40,35 @@ def create_app(settings):
 
     @app.get("/")
     def index():
-        all_jobs = repo.jobs()
+        cloud = feed.read(force=request.args.get("refresh") == "1") if feed else None
+        all_jobs = cloud["jobs"] if cloud else repo.jobs()
+        rejected_jobs = cloud["rejected"] if cloud else repo.rejections()
         cutoff = (datetime.now(timezone.utc) - timedelta(days=settings.recheck_days)).isoformat()
-        for job in all_jobs:
-            job["fresh"] = job["last_seen"] >= cutoff
-            if job.get("deadline"):
+        for job in all_jobs + rejected_jobs:
+            job.setdefault("status", "NEW")
+            job.setdefault("notes", "")
+            job["fresh"] = (job.get("last_seen") or "") >= cutoff
+            # Main sheet does not contain a last-verification timestamp. Don't invent one.
+            job["trusted"] = job["verification_status"] in EXPORTABLE and (bool(cloud) or job["fresh"])
+            if job.get("deadline") and job["deadline"] != "Unknown":
                 try:
-                    job["fresh"] = job["fresh"] and date.fromisoformat(job["deadline"][:10]) >= date.today()
+                    job["trusted"] = (
+                        job["trusted"] and date.fromisoformat(job["deadline"][:10]) >= date.today()
+                    )
                 except ValueError:
-                    job["fresh"] = False
-            job["trusted"] = job["verification_status"] in EXPORTABLE and job["fresh"]
+                    job["trusted"] = False
         counts = {s: sum(j["status"] == s for j in all_jobs) for s in STATUSES}
         counts["STRONG"] = sum(j["match"]["match_score"] >= 80 and j["trusted"] for j in all_jobs)
         counts["VERIFIED"] = sum(j["trusted"] for j in all_jobs)
+        counts["SCREENED"] = len(rejected_jobs)
         view = request.args.get("view", "ALL")
         query = request.args.get("q", "").strip().lower()
         jobs = [
             j
-            for j in all_jobs
+            for j in (rejected_jobs if view == "SCREENED" else all_jobs)
             if (
                 view == "ALL"
+                or view == "SCREENED"
                 or j["status"] == view
                 or view == "STRONG"
                 and j["match"]["match_score"] >= 80
@@ -83,7 +94,11 @@ def create_app(settings):
             query=query,
             sort=sort,
             runs=runs,
-            last=runs[0] if runs else None,
+            last=runs[0] if runs and not cloud else None,
+            cloud=cloud,
+            sheet_url=f"https://docs.google.com/spreadsheets/d/{settings.sheet_id}/edit"
+            if settings.sheet_id
+            else None,
             settings=settings,
             statuses=sorted(STATUSES),
             csrf=session["csrf"],
@@ -94,6 +109,8 @@ def create_app(settings):
     def tracking(job_id):
         if not secrets.compare_digest(request.form.get("csrf", ""), session["csrf"]):
             abort(403)
+        if feed:
+            abort(409, description="Edit tracking in Google Sheets, then refresh the dashboard.")
         try:
             changed = repo.update_tracking(
                 job_id, request.form.get("status", ""), request.form.get("notes", "")

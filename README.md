@@ -224,6 +224,12 @@ External AI is off by default. When explicitly configured, only already verified
 
 ## Commands and scheduling
 
+### Dashboard connected to Google Sheets
+
+When `GOOGLE_SHEET_ID` and Google credentials are configured, the dashboard reads Opportunities and Rejected Matches directly, including cloud-discovered jobs and user-edited Status/Notes. **Screened out** shows the rejection audit separately from your own application statuses. **Refresh from Sheets** bypasses the one-minute in-memory cache; ordinary navigation reuses it. Reading the dashboard never initializes tabs, exports jobs, calls Firecrawl, or changes sheet cells. Edit status/notes using its Google Sheets link. A failed refresh displays a warning and retains the last loaded snapshot; it does not silently substitute an empty local database. The dashboard shows sheet load time, not an invented cloud search/verification timestamp. Full per-component score details and cloud run metrics are not present in the sheet and are not reconstructed.
+
+Without a configured spreadsheet, the local SQLite view and local tracking forms remain available. Google credentials stay server-side. Public dashboard deployment is optional and separate from scheduled discovery: the existing GitHub automation already runs without your laptop. This server is still loopback-only; opening the dashboard from another device would require a separately secured deployment with authentication, HTTPS and server-side secrets.
+
 ```shell
 python main.py doctor                         # Configuration presence, never secret values
 python main.py search                         # Discovery + sync when Sheet ID is configured
