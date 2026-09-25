@@ -26,6 +26,10 @@ class Settings:
     llm_model: str = ""
     llm_base_url: str = ""
     max_llm_calls: int = 0
+    dashboard_mode: str = "local"
+    dashboard_username: str = "internscout"
+    dashboard_password: str = field(default="", repr=False)
+    dashboard_secret_key: str = field(default="", repr=False)
 
     @classmethod
     def from_env(cls):
@@ -61,5 +65,8 @@ class Settings:
             and obj.recheck_days >= 1
         ):
             raise ValueError("Invalid budget, score, or recheck configuration")
-        Path(obj.database_path).parent.mkdir(parents=True, exist_ok=True)
+        if obj.dashboard_mode not in {"local", "hosted"}:
+            raise ValueError("Unknown dashboard mode")
+        if obj.dashboard_mode == "local":
+            Path(obj.database_path).parent.mkdir(parents=True, exist_ok=True)
         return obj

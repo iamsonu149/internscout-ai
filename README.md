@@ -6,7 +6,7 @@ A personal internship discovery and tracking application for an IIT Madras BS Da
 
 ## Quick start
 
-Python 3.11+ is required (tested here on Python 3.13). Open a terminal in this folder:
+Use Python 3.13 (also selected for the Vercel runtime). Open a terminal in this folder:
 
 ```powershell
 python -m venv .venv
@@ -292,6 +292,21 @@ Implement an adapter with `fetch(board) -> list[Job]`, normalize unknowns to `No
 Security defaults include ignored secrets/data, loopback binding, trusted Host checks, per-session CSRF tokens, Jinja escaping, CSP, normalized HTTP(S) links, no arbitrary application submissions, sanitized logs, and no AI tool execution. File paths and source JSON are trusted local configuration. Never expose this personal dashboard publicly without adding proper authentication and a production server.
 
 ## Provider contracts referenced
+
+### Private Vercel dashboard
+
+`wsgi.py` is the hosted entrypoint, configured via `tool.vercel.entrypoint`. The build copies only CSS into `public/static/`; `.vercelignore` excludes local secrets, databases and development files. Configure these Vercel production environment variables before deploying:
+
+- `DASHBOARD_MODE=hosted`
+- `DASHBOARD_USERNAME=internscout`
+- `DASHBOARD_PASSWORD`: a randomly generated secret of at least 24 characters
+- `DASHBOARD_SECRET_KEY`: a stable random value of at least 32 characters
+- `GOOGLE_SHEET_ID`, `GOOGLE_CREDENTIALS_JSON`
+- `GOOGLE_SHEET_TAB=Opportunities`, `GOOGLE_REJECTED_SHEET_TAB=Rejected Matches`
+
+Run `vercel --prod` using Vercel CLI 48.2.10 or later. The hosted app fails closed without the required login secrets. All Flask routes require HTTP Basic authentication over Vercel HTTPS, while public CSS contains no private data. The browser prompts for a username/password; use a private browser window when accessing from a shared device because browsers may remember Basic authentication until closed. The app accepts Vercel hostnames; configure explicit trusted hosts before adding a custom domain. It uses no SQLite database on Vercel. Firecrawl keys are not needed or uploaded for the dashboard. GitHub Actions remains responsible for daily discovery and sheet updates.
+
+Rotate the dashboard password through Vercel environment settings and redeploy if access needs to be revoked. In-memory cached data may be discarded on serverless cold starts; Google Sheets remains the source of truth. This personal single-user login is not a multi-user account system.
 
 - [Firecrawl Search](https://docs.firecrawl.dev/api-reference/endpoint/search) and [Scrape](https://docs.firecrawl.dev/api-reference/endpoint/scrape)
 - [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html)

@@ -13,3 +13,7 @@ data/
 *.db
 *.sqlite*
 *.log
+.vercel/
+public/static/
+
+.vercel

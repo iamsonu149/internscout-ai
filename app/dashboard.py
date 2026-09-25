@@ -2,7 +2,7 @@ import secrets
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, abort, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, session, url_for
 
 from app.database.repository import STATUSES, Repository
 from app.services.dashboard_feed import SheetDashboardFeed
@@ -10,20 +10,47 @@ from app.services.verifier import EXPORTABLE
 
 
 def create_app(settings, sheet_feed=None):
+    hosted = settings.dashboard_mode == "hosted"
+    if hosted and (
+        not settings.sheet_id
+        or len(settings.dashboard_password) < 24
+        or len(settings.dashboard_secret_key) < 32
+    ):
+        raise ValueError("Hosted dashboard requires Sheets and strong authentication secrets")
     app = Flask(__name__)
-    app.secret_key = secrets.token_hex(32)
+    app.secret_key = settings.dashboard_secret_key if hosted else secrets.token_hex(32)
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
+        SESSION_COOKIE_SECURE=hosted,
         MAX_CONTENT_LENGTH=16384,
-        TRUSTED_HOSTS=["127.0.0.1", "localhost"],
+        TRUSTED_HOSTS=[".vercel.app"] if hosted else ["127.0.0.1", "localhost"],
     )
-    repo = Repository(settings.database_path)
+    repo = None if hosted else Repository(settings.database_path)
     feed = sheet_feed or (SheetDashboardFeed(settings) if settings.sheet_id else None)
 
     @app.before_request
     def local_only():
-        if request.remote_addr not in ("127.0.0.1", "::1", None):
+        if hosted:
+            auth = request.authorization
+            if (
+                not auth
+                or auth.type.lower() != "basic"
+                or not (
+                    secrets.compare_digest(
+                        (auth.username or "").encode(), settings.dashboard_username.encode()
+                    )
+                    and secrets.compare_digest(
+                        (auth.password or "").encode(), settings.dashboard_password.encode()
+                    )
+                )
+            ):
+                return Response(
+                    "Sign in to your private InternScout dashboard.",
+                    401,
+                    {"WWW-Authenticate": 'Basic realm="InternScout", charset="UTF-8"'},
+                )
+        elif request.remote_addr not in ("127.0.0.1", "::1", None):
             abort(403)
         if "csrf" not in session:
             session["csrf"] = secrets.token_urlsafe(32)
@@ -84,7 +111,7 @@ def create_app(settings, sheet_feed=None):
         jobs.sort(
             key=lambda j: j["match"]["match_score"] if sort == "match" else j["discovered_at"], reverse=True
         )
-        runs = repo.runs()
+        runs = repo.runs() if repo else []
         return render_template(
             "dashboard.html",
             jobs=jobs,
