@@ -5,7 +5,8 @@ import yaml
 
 def test_daily_workflow_security_schedule_and_persistence():
     doc = yaml.load(Path(".github/workflows/job_search.yml").read_text(), Loader=yaml.BaseLoader)
-    assert doc["on"]["schedule"][0]["cron"] == "30 3 * * *"
+    assert doc["on"]["schedule"][0]["cron"] == "30 3 * * 0,1,3,5"
+    assert doc["jobs"]["discover"]["env"]["MIN_MATCH_SCORE"] == "80"
     assert doc["permissions"] == {"contents": "read"}
     assert doc["concurrency"]["cancel-in-progress"] == "false"
     steps = doc["jobs"]["discover"]["steps"]

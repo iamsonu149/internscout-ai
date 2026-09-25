@@ -12,17 +12,17 @@ class Http:
         self.client = client or httpx.Client(timeout=75, follow_redirects=False)
         self.sleep = sleep
 
-    def json(self, method, url, **kwargs):
-        for attempt in range(3):
+    def json(self, method, url, *, attempts=3, **kwargs):
+        for attempt in range(attempts):
             try:
                 response = self.client.request(method, url, **kwargs)
             except httpx.TransportError:
-                if attempt == 2:
+                if attempt == attempts - 1:
                     raise ProviderError("Network request failed") from None
                 self.sleep(2**attempt)
                 continue
             if response.status_code == 429 or response.status_code >= 500:
-                if attempt < 2:
+                if attempt < attempts - 1:
                     delay = response.headers.get("Retry-After", "")
                     self.sleep(min(float(delay), 30) if delay.isdigit() else 2**attempt)
                     continue

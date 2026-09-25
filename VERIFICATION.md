@@ -52,3 +52,8 @@ The dashboard now uses read-only Google Sheets data when configured, with a sepa
 ## Vercel production deployment
 
 Deployed at https://internscout-ai-psi.vercel.app using Python 3.13 and Vercel Flask support. The first build exposed missing project metadata; the corrected build completed successfully. Anonymous HTTP access returned 401 with a Basic login challenge. Authenticated requests to the opportunity view, screened-out view and forced refresh returned 200 without Sheets errors (2 opportunity cards and 1 rejection card). Public CSS returned 200. Hosted mode initializes no SQLite database and fails closed without strong login secrets. All 43 local tests passed, along with Ruff checks. Login credentials are stored outside the repository and injected as Vercel secrets; Firecrawl remains only in the daily discovery environment. The earlier statement that hosting was not deployed is superseded by this check.
+
+## Credit safeguards and four-day schedule (2026-09-25)
+
+53 tests pass, including document URL blocking before network calls, encoded PDF URLs, disabled PDF parsing/basic proxy request settings, paid-request timeout without retries, and weekly quality counts excluding weak, stale, expired or ineligible jobs. The workflow runs Monday/Wednesday/Friday/Sunday at 09:00 IST and requires score 80. It reports progress toward 14 strong matches per rolling seven days. The Razorpay public board was verified via its official careers page and fetched read-only successfully (25 postings), without Firecrawl. No paid discovery run was triggered during this change; attaining 14 weekly matches has not yet been demonstrated.
+

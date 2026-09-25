@@ -1,4 +1,4 @@
 {
-  "boards": [],
+  "boards": [{"type": "greenhouse", "slug": "razorpaysoftwareprivatelimited", "company": "Razorpay", "verified_from": "https://razorpay.com/careers/", "verified_on": "2026-09-25"}],
   "official_domains": {}
 }

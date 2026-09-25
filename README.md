@@ -118,13 +118,13 @@ No system can guarantee every live listing remains open or every employer is gen
 4. Run `python scripts/smoke_integrations.py --firecrawl` for one search and at most one scrape. This consumes your provider quota.
 5. Run discovery with `python main.py search --no-sync` until satisfied with the output.
 
-Defaults cap each run at 3 logical searches and 8 logical scrapes, with 5 results per search. Retries are bounded to three network attempts per call; a timeout after server processing can consume quota again. Caps are **per run**, not per day. Read your Firecrawl account usage and reduce budgets or schedule frequency to stay within your allowance. Free-first does not guarantee unlimited free usage. The app never provisions paid infrastructure.
+Local defaults cap each run at 3 searches and 8 scrapes, with 5 results per search. Scheduled runs use 6 searches and at most 12 scrapes. Paid Firecrawl requests are attempted once, without automatic retries. Search does not request automatic scraping. Document URLs are blocked; PDF parsers are explicitly disabled and proxies are restricted to basic. An opaque URL redirecting to a PDF can incur a base fetch charge, but no PDF page parsing is requested. Caps are **per run**, not per day. Read your Firecrawl account usage and reduce budgets or schedule frequency to stay within your allowance. Free-first does not guarantee unlimited free usage. The app never provisions paid infrastructure.
 
 Firecrawl Search uses `/v2/search` with web results and no automatic scrape options. Scrape requests markdown and raw HTML, with a fresh fetch. API success and underlying page status are checked separately. Unknown/untrusted discovery domains are excluded before scraping. Successfully handled URLs are cached for `RECHECK_DAYS`; failed requests remain retryable.
 
 ## Public ATS sources and official domains
 
-`sources.json` starts empty so no unreviewed company-to-board mapping is silently trusted. Populate it after verifying the board via that company's official website:
+`sources.json` includes Razorpay's public Greenhouse board, verified through https://razorpay.com/careers/ on 2026-09-25. These direct API reads do not use Firecrawl credits. Add boards only after verifying them via the company's official website:
 
 ```json
 {
@@ -239,7 +239,7 @@ python main.py sync                           # Retry export without repeating d
 python main.py dashboard --port 8000
 ```
 
-If no source succeeds, the run is FAILED and exits nonzero. A source/job/Sheets failure can produce PARTIAL while retaining successfully processed jobs. Zero discovered jobs from a successful source can legitimately be COMPLETED. A missing Sheet ID means local-only mode; the daily workflow separately requires Sheets secrets.
+If no source succeeds, the run is FAILED and exits nonzero. A source/job/Sheets failure can produce PARTIAL while retaining successfully processed jobs. Zero discovered jobs from a successful source can legitimately be COMPLETED. A missing Sheet ID means local-only mode; the scheduled workflow separately requires Sheets secrets.
 
 ### GitHub Actions: no laptop required
 
@@ -247,7 +247,7 @@ If no source succeeds, the run is FAILED and exits nonzero. A source/job/Sheets 
 2. Add repository Actions secrets: `FIRECRAWL_API_KEY` (unless using public boards only), `GOOGLE_CREDENTIALS_JSON` (the entire service-account JSON), and `GOOGLE_SHEET_ID`.
 3. Optional Actions variables: `GOOGLE_SHEET_TAB`, `MAX_QUERIES`, `MAX_SCRAPES`, `RESULTS_PER_QUERY`.
 4. Run **Daily internship discovery → Run workflow** manually and inspect its logs and sheet output.
-5. `.github/workflows/job_search.yml` runs daily at `30 3 * * *`: **03:30 UTC / 09:00 IST**. Edit the cron in that file to change the schedule. GitHub schedule events use UTC, run from the default branch, and can be delayed; this is not an exact-time SLA.
+5. `.github/workflows/job_search.yml` runs Monday, Wednesday, Friday and Sunday at `30 3 * * 0,1,3,5`: **03:30 UTC / 09:00 IST**. Edit the cron in that file to change the schedule. GitHub schedule events use UTC, run from the default branch, and can be delayed; this is not an exact-time SLA.
 
 The workflow installs dependencies, restores SQLite history, runs discovery/sync, and saves history even after partial failures. It grants read-only repository permissions. The separate tests workflow runs on pushes and PRs without integration secrets. GitHub cache is best-effort and may be evicted; it is not a database backup. Sheet-level dedup still prevents ordinary reinsertion if history is lost. Keep independent backups of local data if its history matters. Do not enable workflows for untrusted branches with your secrets. No deployment or repository push is performed by the application.
 
@@ -306,7 +306,7 @@ Security defaults include ignored secrets/data, loopback binding, trusted Host c
 
 Run `vercel --prod` using Vercel CLI 48.2.10 or later. The hosted app fails closed without the required login secrets. Private routes redirect to the styled `/login` page; login assets are public and contain no private data. Credentials have no automatic expiration. With **Keep me signed in** checked, a Secure, HttpOnly session cookie lasts 365 days and renews on activity. Without it, the cookie lasts for the browser session. Sessions survive redeployments while the configured credentials and signing key remain unchanged. Sign out or clear cookies to remove the browser's session; on shared devices, leave the checkbox unchecked and sign out when finished.
 
-The app accepts Vercel hostnames; configure explicit trusted hosts before adding a custom domain. It uses no SQLite database on Vercel. Firecrawl keys are not needed or uploaded for the dashboard. GitHub Actions remains responsible for daily discovery and sheet updates.
+The app accepts Vercel hostnames; configure explicit trusted hosts before adding a custom domain. It uses no SQLite database on Vercel. Firecrawl keys are not needed or uploaded for the dashboard. GitHub Actions remains responsible for scheduled discovery and sheet updates.
 
 Rotate the dashboard password or signing key through Vercel environment settings and redeploy to invalidate existing sessions. In-memory cached data may be discarded on serverless cold starts; Google Sheets remains the source of truth. This personal single-user login is not a multi-user account system.
 
@@ -315,3 +315,11 @@ Rotate the dashboard password or signing key through Vercel environment settings
 - [Lever Postings API](https://github.com/lever/postings-api)
 - [Ashby public job postings API](https://developers.ashbyhq.com/docs/public-job-posting-api)
 - [Google Sheets values.batchUpdate](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/batchUpdate)
+
+### Weekly quality target
+
+The scheduled workflow requires a match score of at least 80 alongside source verification, geography, graduation, expiry and experience checks. It targets 14 new strong matches per rolling seven days, not a guaranteed quota. Logs and the GitHub run summary report the count and shortfall; the target never weakens filters or triggers unlimited paid searches. Unknown graduation wording remains an explicit caveat. Existing sheet rows are retained, not silently deleted.
+
+Four scheduled runs allow at most 24 search requests (120 result slots) and 48 scrape requests per week. These are request limits, not an account-wide credit cap: manual runs and other apps using the same account are separate. Review provider usage before increasing limits.
+
+PDF and proxy safeguards follow the [Firecrawl scraping guide](https://github.com/firecrawl/firecrawl-docs/blob/main/advanced-scraping-guide.mdx) and [proxy documentation](https://docs.firecrawl.dev/features/stealth-mode).

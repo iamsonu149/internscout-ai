@@ -1,7 +1,9 @@
 import argparse
 import json
 import logging
+import os
 import sys
+from pathlib import Path
 
 from filelock import FileLock
 
@@ -54,6 +56,15 @@ def main():
                 settings.max_scrapes = args.max_scrapes
             result = Pipeline(settings).run(sync=not args.no_sync)
             print(json.dumps(result, indent=2))
+            if os.getenv("GITHUB_STEP_SUMMARY"):
+                with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+                    summary.write(
+                        f"## Weekly quality target\n\n"
+                        f"{result['weekly_strong_matches']} / 14 strong matches first discovered in the last 7 days. "
+                        f"Shortfall: {result['weekly_shortfall']}. Quality filters are never relaxed.\n\n"
+                        f"This run: {result['queries']} searches, {result['scraped']} scrape attempts, "
+                        f"{result['added']} new matches, {result['errors']} errors.\n"
+                    )
             return 0 if result["state"] == "COMPLETED" else 1
         elif args.command == "sync":
             if not settings.sheet_id:

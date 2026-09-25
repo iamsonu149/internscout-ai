@@ -16,6 +16,7 @@ from app.services.job_extractor import extract
 from app.services.job_sources.ats import PublicATS
 from app.services.matcher import CompatibleLLM, match_job
 from app.services.verifier import ATS_HOSTS, EXPORTABLE, verify
+from app.services.weekly_target import weekly_progress
 
 log = logging.getLogger("internscout")
 
@@ -155,6 +156,7 @@ class Pipeline:
             state = "FAILED"
             event("ERROR", stage="pipeline", error_type=type(exc).__name__)
         finally:
+            metrics.update(weekly_progress(self.repo.jobs(), self.profile))
             self.repo.finish_run(run_id, metrics, locals().get("state", "FAILED"))
         event("SEARCH_COMPLETED", state=state, **metrics)
         return {"state": state, **metrics}
