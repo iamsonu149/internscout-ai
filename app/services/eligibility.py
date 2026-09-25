@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from app.services.compensation import PAY_REASON, paid_evidence
+from app.services.compensation import PAY_REASON, PAY_UNCONFIRMED, compensation_allowed, paid_evidence
 
 
 @dataclass
@@ -24,8 +24,10 @@ def evaluate(job, profile, today=None):
     )
     title = job.title.lower()
     reasons, concerns = [], []
-    if not paid_evidence(job.salary_or_stipend, job.description):
+    if not compensation_allowed(job.salary_or_stipend, job.description):
         reasons.append(PAY_REASON)
+    elif not paid_evidence(job.salary_or_stipend, job.description):
+        concerns.append(PAY_UNCONFIRMED)
     if not re.search(r"\bintern(?:ship)?\b", title + " " + (job.employment_type or ""), re.I):
         reasons.append("Not explicitly an internship")
     if not re.search(

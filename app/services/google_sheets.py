@@ -9,7 +9,7 @@ from google.auth.transport.requests import AuthorizedSession
 from google.oauth2 import credentials, service_account
 
 from app.models import Job
-from app.services.compensation import PAY_REASON, paid_evidence
+from app.services.compensation import PAY_REASON, PAY_UNCONFIRMED, compensation_allowed
 from app.services.deduplicator import fingerprint, normalize_url
 from app.services.http import ProviderError
 from app.services.verifier import EXPORTABLE
@@ -71,7 +71,7 @@ def sheet_row(item):
         match["eligibility"],
         ", ".join(match["matching_skills"]),
         ", ".join(match["missing_skills"]),
-        item.get("salary_or_stipend") or "Unknown",
+        item.get("salary_or_stipend") or PAY_UNCONFIRMED,
         item.get("deadline") or "Unknown",
         item["verification_status"],
         item["source_url"],
@@ -237,7 +237,7 @@ class GoogleSheets:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=self.settings.recheck_days)).isoformat()
         for item in items:
             row = sheet_row(item)
-            paid = bool(paid_evidence(item.get("salary_or_stipend"), item.get("description", "")))
+            paid = compensation_allowed(item.get("salary_or_stipend"), item.get("description", ""))
             if not paid:
                 row[7] = PAY_REASON
             fresh = item["last_seen"] >= cutoff

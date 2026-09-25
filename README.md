@@ -318,7 +318,7 @@ Rotate the dashboard password or signing key through Vercel environment settings
 
 ### Weekly quality target
 
-The scheduled workflow requires a match score of at least 80 alongside source verification, geography, graduation, expiry and experience checks. It targets 20 new paid strong matches per rolling seven days, not a guaranteed quota. Logs and the GitHub run summary report the count and shortfall; the target never weakens filters or triggers unlimited paid searches. Unknown graduation wording remains an explicit caveat. Existing sheet rows are retained, not silently deleted.
+The scheduled workflow requires a match score of at least 80 alongside source verification, geography, graduation, expiry and experience checks. It targets 20 new strong matches per rolling seven days, not a guaranteed quota. Logs and the GitHub run summary report the count and shortfall; the target never weakens filters or triggers unlimited paid searches. Unknown graduation wording remains an explicit caveat. Existing sheet rows are retained, not silently deleted.
 
 Four scheduled runs allow at most 24 search requests (120 result slots) and 48 scrape requests per week. These are request limits, not an account-wide credit cap: manual runs and other apps using the same account are separate. Review provider usage before increasing limits.
 
@@ -328,6 +328,6 @@ PDF and proxy safeguards follow the [Firecrawl scraping guide](https://github.co
 
 Both tabs omit Relevant Projects, Source, Application URL and Notes. Job URL remains the posting link and deduplication key; the hosted dashboard opens this URL. Status remains user-managed and is preserved by synchronization. Last Evaluated (UTC) uses `YYYY-MM-DD HH:MM`, without seconds. Internal application URLs are still required to verify destinations, but are not exported as a separate column. Existing user notes are not collected from the sheet. The hosted reader accepts both old and compact header layouts during deployment; exports require the exact compact headers.
 
-### Paid internships only
+### Compensation policy
 
-Accepted discoveries must explicitly be internships and have positive pay evidence from the verified listing: a positive salary/stipend amount or an explicit paid-internship statement. Unknown pay, unpaid roles, commission-only and ambiguous conditional pay are excluded and may appear in Rejected Matches with a reason. Benefits such as paid leave and company reputation do not establish compensation. Existing unknown-pay sheet rows remain as history but are screened out of dashboard recommendations. The four-day schedule, score threshold of 80 and paid-request limits remain unchanged. Twenty per week is an aspiration, not a guaranteed yield or permission to spend more credits.
+Internships with undisclosed compensation are accepted if all other quality checks pass, with a visible pay-unconfirmed caveat. Explicitly unpaid, zero-pay or conditional-only compensation remains excluded. Benefits and company reputation do not prove pay. The dashboard includes historic unknown-pay listings with the same caveat; confirmed stipend information is preserved when available. The target remains 20 technical matches per rolling week, with score 80 and the existing four-day schedule and credit limits unchanged.

@@ -46,4 +46,29 @@ def paid_evidence(salary=None, description=""):
     return None
 
 
-PAY_REASON = "Paid compensation is not confirmed, or the listing is unpaid/conditional"
+def compensation_allowed(salary=None, description=""):
+    """Undisclosed pay is acceptable; explicit unpaid/conditional pay is not."""
+    text = "\n".join([str(salary or ""), description or ""])
+    if re.search(
+        r"\bunpaid\s+(?:internship|intern|role|position|opportunity)\b|\b(?:internship|role|position)\s+(?:is\s+)?unpaid\b|^\s*unpaid\s*$|\bno\s+(?:salary|stipend|remuneration|pay)\b|without\s+(?:pay|stipend)|not\s+(?:a\s+)?paid|commission[ -]only|(?:stipend|pay|salary).{0,45}(?:performance[ -]based|subject to|may be|not guaranteed|up to)|(?:performance[ -]based|discretionary|potential).{0,25}(?:stipend|pay|salary)",
+        text,
+        re.I | re.M,
+    ):
+        return False
+    try:
+        data = json.loads(salary) if isinstance(salary, str) else salary
+        if isinstance(data, dict) and data.get("currency"):
+            value = data.get("value")
+            if isinstance(value, dict):
+                value = value.get("minValue", value.get("value"))
+            if isinstance(value, (int, float)) and value <= 0:
+                return False
+    except (ValueError, TypeError):
+        pass
+    if re.search(r"(?:INR|USD|EUR|GBP|Rs\.?|₹|\$|€|£)\s*0(?:\.0+)?(?:\D|$)", str(salary or ""), re.I):
+        return False
+    return True
+
+
+PAY_REASON = "Listing explicitly states unpaid, zero, or conditional-only compensation"
+PAY_UNCONFIRMED = "Pay unconfirmed — confirm stipend before applying"

@@ -66,3 +66,8 @@ Removed Relevant Projects, Source, Application URL and Notes from both live tabs
 
 70 tests pass. Added explicit pay-evidence screening, rejection of unknown/unpaid/conditional pay, positive structured salary checks, internship-only checks for paid full-time jobs, sheet export protection against old unknown-pay records, and dashboard screening of unknown-pay history. Broadened technical role queries while retaining score 80, verification, geography and graduation rules. Weekly progress now targets 20; no budget increase or paid discovery run was triggered. Existing sheet rows remain as history.
 
+
+## Undisclosed compensation allowed (2026-09-25)
+
+Updated policy at user request: undisclosed pay is eligible with an explicit caveat; unpaid, zero or conditional-only pay remains excluded. Updated eligibility, sheet export, dashboard handling and weekly report wording. All 70 tests pass. Target 20, schedule, score threshold and credit limits are unchanged.
+

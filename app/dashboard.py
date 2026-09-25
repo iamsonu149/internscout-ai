@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Flask, abort, redirect, render_template, request, session, url_for
 
 from app.database.repository import STATUSES, Repository
-from app.services.compensation import PAY_REASON, paid_evidence
+from app.services.compensation import PAY_REASON, PAY_UNCONFIRMED, compensation_allowed, paid_evidence
 from app.services.dashboard_feed import SheetDashboardFeed
 from app.services.verifier import EXPORTABLE
 
@@ -110,11 +110,13 @@ def create_app(settings, sheet_feed=None):
         paid_jobs = []
         rejected_urls = {j.get("source_url") for j in rejected_jobs}
         for job in all_jobs:
-            if paid_evidence(job.get("salary_or_stipend"), job.get("description", "")):
+            if compensation_allowed(job.get("salary_or_stipend"), job.get("description", "")):
+                if not paid_evidence(job.get("salary_or_stipend"), job.get("description", "")):
+                    job["salary_or_stipend"] = PAY_UNCONFIRMED
                 paid_jobs.append(job)
             elif job.get("source_url") not in rejected_urls:
                 job["rejection_reasons"] = [PAY_REASON]
-                job["decision"] = "PAY UNCONFIRMED / EXCLUDED"
+                job["decision"] = "UNPAID / CONDITIONAL PAY EXCLUDED"
                 rejected_jobs.append(job)
         all_jobs = paid_jobs
         cutoff = (datetime.now(timezone.utc) - timedelta(days=settings.recheck_days)).isoformat()

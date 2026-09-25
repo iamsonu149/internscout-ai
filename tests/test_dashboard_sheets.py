@@ -103,7 +103,7 @@ def test_connection_failure_is_visible_not_empty_success(tmp_path):
     assert b"Could not refresh Google Sheets" in client.get("/").data
 
 
-def test_unknown_pay_history_is_screened_out(tmp_path):
+def test_unknown_pay_history_is_allowed_with_caveat(tmp_path):
     row = sheet_row(item() | {"salary_or_stipend": "Unknown"})
 
     class Feed:
@@ -116,6 +116,7 @@ def test_unknown_pay_history_is_screened_out(tmp_path):
             }
 
     client = create_app(Settings(database_path=str(tmp_path / "db")), sheet_feed=Feed()).test_client()
-    assert b"Backend Engineer Intern" not in client.get("/").data
+    assert b"Backend Engineer Intern" in client.get("/").data
+    assert b"Pay unconfirmed" in client.get("/").data
     screened = client.get("/?view=SCREENED").data
-    assert b"Backend Engineer Intern" in screened and b"Paid compensation is not confirmed" in screened
+    assert b"Backend Engineer Intern" not in screened
