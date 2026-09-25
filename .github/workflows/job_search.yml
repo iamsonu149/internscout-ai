@@ -1,0 +1,48 @@
+name: Daily internship discovery
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:30 UTC = 09:00 India Standard Time. Edit this cron to change the schedule.
+    - cron: '30 3 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: internscout-daily
+  cancel-in-progress: false
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+      GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+      GOOGLE_SHEET_TAB: ${{ vars.GOOGLE_SHEET_TAB || 'Opportunities' }}
+      GOOGLE_REJECTED_SHEET_TAB: ${{ vars.GOOGLE_REJECTED_SHEET_TAB || 'Rejected Matches' }}
+      MAX_QUERIES: ${{ vars.MAX_QUERIES || '3' }}
+      MAX_SCRAPES: ${{ vars.MAX_SCRAPES || '8' }}
+      RESULTS_PER_QUERY: ${{ vars.RESULTS_PER_QUERY || '5' }}
+      DATABASE_PATH: data/internscout.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Restore discovery history
+        uses: actions/cache/restore@v4
+        with:
+          path: data/
+          key: internscout-db-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: internscout-db-
+      - run: python -m pip install -r requirements.txt
+      - name: Require output configuration
+        run: python -c "import os; assert os.getenv('GOOGLE_SHEET_ID') and os.getenv('GOOGLE_CREDENTIALS_JSON'), 'Configure Google Sheet and service-account secrets before enabling this workflow'"
+      - name: Discover, verify, match and sync
+        run: python main.py search
+      - name: Save history even after partial failures
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/
+          key: internscout-db-${{ github.run_id }}-${{ github.run_attempt }}

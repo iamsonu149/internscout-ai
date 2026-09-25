@@ -1,0 +1,17 @@
+{
+  "education": "BS in Data Science and Applications",
+  "institution": "IIT Madras",
+  "cgpa": 8.66,
+  "graduation_year": 2027,
+  "country": "India",
+  "primary_roles": ["Software Engineer Intern", "Software Developer Intern", "SDE Intern", "Backend Engineer Intern", "Backend Developer Intern", "Python Developer Intern", "Software Engineering Intern"],
+  "secondary_roles": ["Machine Learning Intern", "Data Science Intern", "AI/ML Intern", "Data Engineering Intern"],
+  "skills": ["Python", "C++", "SQL", "Data Structures", "Algorithms", "Object-Oriented Programming", "Flask", "Jinja", "HTML", "CSS", "Vue.js", "REST APIs", "Pandas", "NumPy", "Scikit-learn", "Git", "GitHub", "PostgreSQL", "Redis", "Celery"],
+  "experience": ["Python Developer at PKD Arena Private Limited: Flask, PostgreSQL, REST APIs, authentication/authorization, input validation, exception handling, logging and API testing"],
+  "projects": [
+    {"name": "Hospital Management Web Application", "keywords": ["backend", "web", "flask", "api", "sql"]},
+    {"name": "Flight Price Prediction", "keywords": ["machine learning", "data science", "prediction", "scikit-learn"]},
+    {"name": "Creature Lab", "keywords": []}
+  ],
+  "achievements": ["600+ LeetCode/DSA problems", "120+ day problem-solving streak"]
+}

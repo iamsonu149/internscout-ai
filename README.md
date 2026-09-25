@@ -1,0 +1,294 @@
+# InternScout AI
+
+A personal internship discovery and tracking application for an IIT Madras BS Data Science student graduating in 2027. It prioritizes evidence and relevant opportunities over volume, runs locally without an LLM, and uses Google Sheets as its primary output.
+
+**It never applies, submits recruitment forms, sends recruiter emails, or uploads resumes.** The dashboard links to the original application page; you make the final decision.
+
+## Quick start
+
+Python 3.11+ is required (tested here on Python 3.13). Open a terminal in this folder:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
+.venv\Scripts\python main.py doctor
+.venv\Scripts\python main.py dashboard
+```
+
+On macOS/Linux, use `.venv/bin/python` in place of `.venv\Scripts\python` and `cp .env.example .env`.
+
+Open **http://127.0.0.1:8000**. The initial dashboard is intentionally empty: no fabricated jobs, scores, or verification labels are seeded. Stop the local server with Ctrl+C. The following commands assume your virtual environment is activated, or that you substitute its Python path.
+
+Set the credentials described below, then run a small search:
+
+```shell
+python main.py search --max-queries 1 --max-scrapes 2
+```
+
+Refresh the dashboard after completion. The dashboard's Run a search link opens the exact CLI instructions, rather than starting a paid provider request from a browser click.
+
+## Architecture
+
+```text
+Profile-derived rotating queries       Configured public ATS boards
+              |                                     |
+       Firecrawl Search                  Greenhouse / Lever / Ashby
+              |                                     |
+ Normalize URLs → deduplicate → known-domain filter  |
+              |                                     |
+   Bounded Firecrawl Scrape                          |
+              |                                     |
+     Single JobPosting JSON-LD ← normalized Job schema
+                          |
+              Evidence-based verification
+                          |
+            Deterministic eligibility gates
+                          |
+       Explainable matching → optional capped AI notes
+                          |
+                SQLite repository/history
+                   /                 \
+           Google Sheets         Local Flask dashboard
+```
+
+Public ATS feeds are processed first so matching search URLs do not spend scrape credits. Search results are hints, never evidence of authenticity. No crawling is enabled by default because individual postings and public APIs are sufficient for V1.
+
+```text
+app/config/                     Environment configuration
+app/models/                     Job and Match dataclasses
+app/services/firecrawl_service.py Search, scrape, query rotation
+app/services/job_sources/ats.py  Read-only public board adapters
+app/services/job_extractor.py    JSON-LD normalization and explicit unknowns
+app/services/deduplicator.py     Safe URL normalization and fingerprints
+app/services/verifier.py        Evidence and source trust
+app/services/eligibility.py     Hard exclusions and uncertainty
+app/services/matcher.py         Weighted matching and optional AI interface
+app/services/google_sheets.py   Authentication, schema, idempotent sync
+app/services/pipeline.py        Orchestration, budgets, isolated failures
+app/database/repository.py      SQLite persistence behind a repository
+app/dashboard.py               Local-only dashboard and tracking
+app/templates/, app/static/     Dashboard UI
+scripts/smoke_integrations.py   Small opt-in live provider checks
+tests/                         Offline contract and regression tests
+.github/workflows/             Daily discovery and CI
+```
+
+## Profile and matching
+
+`profile.json` contains the supplied education, CGPA, 2027 graduation, skills, experience, projects, and DSA achievements. Edit this file to change your targets. Project keyword associations are matching heuristics based on project names, not claims about an undocumented implementation. Creature Lab has no assumed stack. Resume upload/parsing is not part of V1; manually add evidence to this profile.
+
+Queries rotate deterministically by day and derive role names, country, and graduation year from the profile. V1 eligibility geography is specifically India plus explicitly worldwide remote positions. If you change countries, update the location gate rather than assuming profile changes alone adapt it.
+
+The score is **relevance, not an interview probability**. Its components are shown per job:
+
+| Component | Maximum | Rule |
+|---|---:|---|
+| Role relevance | 30 | Primary target 30; secondary technical target 22 |
+| Skills | 30 | Proportion of recognized job skills also in the profile |
+| Eligibility | 20 | Passing gates with stated compatible graduation: 20; cohort unstated: 12 |
+| Education | 10 | Recognized undergraduate/related-field requirement |
+| Experience and projects | 10 | 5 for evidenced experience skill overlap; 5 for relevant project keywords |
+
+Missing data receives no invented skill or education credit. All recognized skills in the description count, including preferred skills; the score is deliberately simple and may be conservative. Default export threshold is 60. Strong matches are fresh, trusted jobs scoring at least 80.
+
+Eligibility rejects non-internship roles, unrelated/senior titles, unclear India eligibility, explicit incompatible graduation years, passed/unparseable deadlines, closed postings, and multiple required years of experience absent from the profile. Remote alone does **not** prove eligibility from India. Unknown cohort/deadline remains a visible concern. Natural-language requirements can be ambiguous; always read the original posting.
+
+## Trust policy and deliberate coverage limits
+
+| Status | Evidence | Sheet handling |
+|---|---|---|
+| `VERIFIED_OFFICIAL` | Successfully fetched single JobPosting, matching company/domain allowlist, description and trusted application destination | Eligible for export after matching |
+| `VERIFIED_ATS` | Active job in a configured public board, or fetched single structured posting on an exact recognized ATS hostname | Eligible for export after matching |
+| `LIKELY_GENUINE` | Reserved for a future audited manual-review adapter | Supported by export policy, never automatically assigned in V1 |
+| `UNVERIFIED` | Missing ownership, content, application destination, or evidence | Never newly exported |
+| `REJECTED` | Unsafe URL, suspicious fee claim, or known invalid/expired existing posting | Never newly exported |
+
+Allowed ATS hostnames include Greenhouse, Lever, Ashby, and Workable. Public API adapters exist for the first three. Workable uses the Firecrawl/structured-page path. Hostnames are matched exactly, so `jobs.lever.co.evil.example` is not trusted. Source configuration is a trust root: verify a company's official career page links to its board before adding its mapping.
+
+For website extraction, V1 requires exactly one `JobPosting` JSON-LD object. Pages with only prose, multiple postings, login walls, malformed data, or no application link/form are excluded. This is a deliberate false-negative tradeoff; it does **not** imply an excluded listing is fake. Add a public ATS board to improve coverage without extra Firecrawl scrapes.
+
+No system can guarantee every live listing remains open or every employer is genuine. Verification records what was observed, not an endorsement. Old evidence is labelled stale in the dashboard; sync excludes stale jobs from new exports and changes existing stale sheet rows to UNVERIFIED. Explicit deadlines are rechecked at sync. Status and Notes remain yours, even when evidence changes. Deleted ATS posts become stale when not seen again; they are not automatically marked CLOSED merely because a feed temporarily omits them.
+
+## Firecrawl setup and budgets
+
+1. Obtain a Firecrawl API key in your own account.
+2. Set `FIRECRAWL_API_KEY` in `.env` (never in Python files).
+3. Start with `MAX_QUERIES=1`, `RESULTS_PER_QUERY=2`, and `MAX_SCRAPES=2`.
+4. Run `python scripts/smoke_integrations.py --firecrawl` for one search and at most one scrape. This consumes your provider quota.
+5. Run discovery with `python main.py search --no-sync` until satisfied with the output.
+
+Defaults cap each run at 3 logical searches and 8 logical scrapes, with 5 results per search. Retries are bounded to three network attempts per call; a timeout after server processing can consume quota again. Caps are **per run**, not per day. Read your Firecrawl account usage and reduce budgets or schedule frequency to stay within your allowance. Free-first does not guarantee unlimited free usage. The app never provisions paid infrastructure.
+
+Firecrawl Search uses `/v2/search` with web results and no automatic scrape options. Scrape requests markdown and raw HTML, with a fresh fetch. API success and underlying page status are checked separately. Unknown/untrusted discovery domains are excluded before scraping. Successfully handled URLs are cached for `RECHECK_DAYS`; failed requests remain retryable.
+
+## Public ATS sources and official domains
+
+`sources.json` starts empty so no unreviewed company-to-board mapping is silently trusted. Populate it after verifying the board via that company's official website:
+
+```json
+{
+  "boards": [
+    {"type": "greenhouse", "slug": "YOUR_BOARD_TOKEN", "company": "Exact Company Name"},
+    {"type": "lever", "slug": "YOUR_SITE_NAME", "company": "Another Company"},
+    {"type": "ashby", "slug": "YOUR_BOARD_NAME", "company": "Third Company"}
+  ],
+  "official_domains": {
+    "careers.your-company.example": "Exact Company Name"
+  }
+}
+```
+
+Replace placeholders; they are not working board identifiers. Remove unused entries. Map the exact career hostname and the employer name used by the job's structured data. These adapters use public GET endpoints only, never application submission endpoints. No API keys are needed for these board reads. Follow the provider's terms and rate limits. No authenticated/private job boards are bypassed.
+
+## Google Sheets setup
+
+The spreadsheet now has two output tabs:
+
+- **Opportunities**: jobs that pass verification, eligibility, and the minimum match score.
+- **Rejected Matches**: an audit of technical internships with at least one matching skill that were excluded. Includes **Rejection Reason**, **Screening Decision**, and **Last Evaluated (UTC)** in addition to the usual job and match columns. Examples: incompatible graduation cohort, unclear India eligibility, unverified source, expired listing, or a score below the threshold.
+
+Rejected Matches is an audit, not a list of recommended or verified openings. The Verification Status column retains the actual evidence status. Unrelated jobs and unextractable search snippets are not inserted. Rejection means the app excluded the listing, not that the employer rejected an application. Status and Notes remain user-managed in both tabs. If a rejected listing later qualifies, it is added to Opportunities and its audit entry becomes **NOW MATCHED**; the historical rejection reason and notes are retained. Existing tracked opportunities are not deleted if later excluded, preserving your application history.
+
+Both `search` and `sync` synchronize both tabs. `GOOGLE_REJECTED_SHEET_TAB` changes the audit tab name (default `Rejected Matches`); it must differ from `GOOGLE_SHEET_TAB`. The additive `rejected_matches` SQLite table stores these records separately from accepted jobs. It does not require external AI or additional Firecrawl requests. Jobs excluded before this feature was enabled cannot be reconstructed from snippets; they appear after being processed again.
+
+Create a dedicated spreadsheet, or use an existing spreadsheet with a dedicated empty tab. The default tab name is `Opportunities`. Copy the spreadsheet ID from the part between `/d/` and `/edit` in its URL into `GOOGLE_SHEET_ID`.
+
+### Service account (recommended for scheduled execution)
+
+1. In Google Cloud Console, select/create a project and enable **Google Sheets API**.
+2. Create a service account. You do not need broad project Editor permissions for this app.
+3. Create/download its JSON key and store it **outside the repository**, or under the ignored `secrets/` directory.
+4. Share only the target spreadsheet with the service account's `client_email` as **Editor**.
+5. Set `GOOGLE_APPLICATION_CREDENTIALS` to that JSON file's path. Alternatively, put its full JSON in `GOOGLE_CREDENTIALS_JSON`, suitable for a secret manager or GitHub Actions secret.
+6. Set `GOOGLE_SHEET_ID`, and optionally `GOOGLE_SHEET_TAB`.
+7. Run `python scripts/smoke_integrations.py --sheets`. This checks access **without writing**.
+8. Run `python main.py sync` to initialize the tab and export qualified local jobs.
+
+The app initializes 19 exact headers, freezes the header, adds a filter, and adds Status validation. It refuses a nonempty tab whose header differs. Choose a new tab instead of forcing it to overwrite another table.
+
+### OAuth alternative
+
+Service accounts are simpler for unattended use, but authorized-user OAuth credentials are supported:
+
+1. Enable Sheets API and configure your Google OAuth consent screen and test user as appropriate.
+2. Create a Desktop OAuth client; download its client configuration outside the repository.
+3. In your own terminal, install `google-auth-oauthlib` for this **one-time setup** and run an InstalledAppFlow requesting only `https://www.googleapis.com/auth/spreadsheets`. Use `access_type='offline'` and `prompt='consent'` to obtain a refresh token:
+
+```python
+from pathlib import Path
+from google_auth_oauthlib.flow import InstalledAppFlow
+
+flow = InstalledAppFlow.from_client_secrets_file(
+    "secrets/oauth-client.json",
+    scopes=["https://www.googleapis.com/auth/spreadsheets"],
+)
+credentials = flow.run_local_server(port=0, access_type="offline", prompt="consent")
+Path("secrets/oauth-user.json").write_text(credentials.to_json(), encoding="utf-8")
+```
+
+4. Set `GOOGLE_OAUTH_FILE=secrets/oauth-user.json` and leave both service-account variables blank. The authenticated user must have edit access to the spreadsheet. AuthorizedSession refreshes credentials in memory from the refresh token. OAuth testing-mode tokens may expire or be revoked; use a properly configured OAuth application or the service-account route for stable scheduling.
+
+Do not commit OAuth client files, refresh tokens, or service-account keys. Authentication precedence is inline service-account JSON, then service-account file, then OAuth file.
+
+### Columns, deduplication and ownership
+
+The sheet has: Date Found, Company, Job Title, Location, Remote, Internship Type, Match Score, Eligibility, Matching Skills, Missing Skills, Relevant Projects, Stipend/Salary, Deadline, Source, Verification Status, Application URL, Job URL, Status, Notes.
+
+New jobs start with `NEW`. Supported tracking states: `NEW`, `SAVED`, `APPLIED`, `INTERVIEW`, `REJECTED`, `CLOSED`.
+
+Application URLs and company/title/location fingerprints are checked against the sheet itself, including after a local database loss. Existing rows update **B:Q only**. Date Found, Status, and Notes are preserved. Sheet tracking values are mirrored locally during sync. Local dashboard tracking is useful before export; after export, edit tracking **in the sheet** because sheet values win on the next sync.
+
+Writes use `RAW` values, so text starting with `=` is not executed as a spreadsheet formula. Fixed row ranges make transport retries idempotent. A local file lock prevents simultaneous local search/sync processes; GitHub concurrency prevents overlapping scheduled runs. **Do not run a local writer and GitHub writer simultaneously against the same tab**, and avoid sorting/inserting/deleting rows while sync runs. There is no distributed lock or Google Sheets transactional compare-and-swap in V1. Existing duplicate rows are preserved rather than deleted.
+
+## Environment reference
+
+See `.env.example` for defaults.
+
+| Variable | Purpose |
+|---|---|
+| `FIRECRAWL_API_KEY` | Search/scrape authentication; optional when only public boards are used |
+| `DATABASE_PATH` | SQLite location; default `data/internscout.db` |
+| `PROFILE_PATH`, `SOURCES_PATH` | Profile and trusted source JSON files |
+| `MAX_QUERIES`, `RESULTS_PER_QUERY`, `MAX_SCRAPES` | Per-run Firecrawl budgets |
+| `MIN_MATCH_SCORE` | Minimum score stored/exported; default 60 |
+| `RECHECK_DAYS` | Discovery URL cache and freshness window; default 7 |
+| `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_TAB` | Primary output spreadsheet and tab |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Service-account JSON path |
+| `GOOGLE_CREDENTIALS_JSON` | Service-account JSON environment secret |
+| `GOOGLE_OAUTH_FILE` | Authorized-user JSON with refresh token |
+| `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` | Optional OpenAI-compatible provider; base ends at API prefix, e.g. `/v1` |
+| `MAX_LLM_CALLS` | Maximum optional notes calls per run; default 0, hard maximum 30 |
+
+External AI is off by default. When explicitly configured, only already verified, eligible jobs above the score threshold are sent. It receives the job description and matching explanation, not a resume file. The provider may receive project names in that explanation. AI notes are advisory and cannot change scores, trust, or eligibility. AI failures do not discard deterministic matches. No specific provider is required.
+
+## Commands and scheduling
+
+```shell
+python main.py doctor                         # Configuration presence, never secret values
+python main.py search                         # Discovery + sync when Sheet ID is configured
+python main.py search --no-sync               # Local-only output
+python main.py search --max-queries 1 --max-scrapes 2
+python main.py sync                           # Retry export without repeating discovery
+python main.py dashboard --port 8000
+```
+
+If no source succeeds, the run is FAILED and exits nonzero. A source/job/Sheets failure can produce PARTIAL while retaining successfully processed jobs. Zero discovered jobs from a successful source can legitimately be COMPLETED. A missing Sheet ID means local-only mode; the daily workflow separately requires Sheets secrets.
+
+### GitHub Actions: no laptop required
+
+1. Create a preferably **private** GitHub repository, review `profile.json` and your source mappings, and push this project yourself. Never push `.env`, `data/`, or secret files.
+2. Add repository Actions secrets: `FIRECRAWL_API_KEY` (unless using public boards only), `GOOGLE_CREDENTIALS_JSON` (the entire service-account JSON), and `GOOGLE_SHEET_ID`.
+3. Optional Actions variables: `GOOGLE_SHEET_TAB`, `MAX_QUERIES`, `MAX_SCRAPES`, `RESULTS_PER_QUERY`.
+4. Run **Daily internship discovery → Run workflow** manually and inspect its logs and sheet output.
+5. `.github/workflows/job_search.yml` runs daily at `30 3 * * *`: **03:30 UTC / 09:00 IST**. Edit the cron in that file to change the schedule. GitHub schedule events use UTC, run from the default branch, and can be delayed; this is not an exact-time SLA.
+
+The workflow installs dependencies, restores SQLite history, runs discovery/sync, and saves history even after partial failures. It grants read-only repository permissions. The separate tests workflow runs on pushes and PRs without integration secrets. GitHub cache is best-effort and may be evicted; it is not a database backup. Sheet-level dedup still prevents ordinary reinsertion if history is lost. Keep independent backups of local data if its history matters. Do not enable workflows for untrusted branches with your secrets. No deployment or repository push is performed by the application.
+
+GitHub caches may be readable by code with access to the repository's workflows. Use a private repository for personal profile/history. Usage must stay within your account's current Actions and provider allowances. n8n and Telegram are not required or implemented in V1.
+
+## Database and recovery
+
+SQLite uses WAL and parameterized queries. `jobs` holds canonical posting JSON and tracking; `job_matches` holds the score breakdown; `sources` caches URL attempts/outcomes; `search_runs` holds timestamps, state, and counts. `job_urls` preserves canonical URL aliases. Matching URL/fingerprint updates preserve discovery date and personal tracking. Stronger source evidence can replace weaker evidence.
+
+The repository is the persistence boundary for a later PostgreSQL/Supabase adapter. This project does not claim a zero-code database migration. Stop active writers before backing up or replacing SQLite. Keep its WAL alongside the database when taking a live filesystem copy, or use SQLite's backup API. CLI and dashboard must use the same `DATABASE_PATH`.
+
+## Tests and verification
+
+```shell
+python -m pytest -q
+python -m ruff check .
+python -m ruff format --check .
+python scripts/smoke_integrations.py --firecrawl --sheets
+```
+
+The offline suite exercises API response contracts, page-status failures, retries, extraction, URL safety, duplicate handling, expiry/eligibility, explainable matching, persistence, per-job failure isolation, sheet tracking preservation, formula safety, stale exports, dashboard security and tracking, and workflow structure. It does not require real credentials or write to a real sheet.
+
+Live smoke checks are opt-in and explicitly print SKIPPED when credentials are absent. A passing Sheets smoke check proves read access only; run `sync` and inspect the real sheet to verify write permission. Automated end-to-end tests use injected provider fakes; they are not evidence of live authenticated integration. See `VERIFICATION.md` for checks actually run during this implementation.
+
+## Troubleshooting
+
+- **No jobs:** check `doctor`, run logs and source mappings. Conservative extraction, unknown remote eligibility, or a high score threshold can legitimately return no jobs. Search snippets are never promoted to jobs. Add reviewed public ATS boards for coverage.
+- **Firecrawl 401/403:** check the key/account; **429:** reduce budgets or frequency. Bounded retry/backoff handles temporary throttling, not exhausted credits.
+- **Sheet 403:** enable Sheets API and share the spreadsheet with the service account email, or check OAuth scopes/user permissions.
+- **Sheet 404:** check the ID and the authenticated principal's access.
+- **Header mismatch:** use an empty dedicated tab with `GOOGLE_SHEET_TAB`; do not rename/reorder required columns.
+- **PARTIAL run:** check sanitized structured events by stage, fix the failing source, then rerun. Use `sync` to retry only Sheets.
+- **Locked database/run:** another search/sync process is active. Allow it to finish. Do not delete a lock while a writer is running.
+- **Stale evidence:** use the original URL, wait for the recheck window, or run the configured public board again. Never assume a cached verified label guarantees a role is still open.
+- **Only generic error types in logs:** credentials/provider response bodies are intentionally not logged. Check configuration and provider dashboards; do not paste secret-bearing tracebacks into public issues.
+- **Dashboard inaccessible:** it binds only to `127.0.0.1`. It is for the local machine, not a public web service. Production discovery runs through the CLI/Actions; the Flask development server is not an Internet deployment.
+
+## Extending sources and trust
+
+Implement an adapter with `fetch(board) -> list[Job]`, normalize unknowns to `None`, and supply auditable evidence. Wire it into the pipeline's public-source stage (or extend `PublicATS` for another documented public API). Add fixtures for malformed, expired, duplicate, foreign-location and active postings before adding a trust rule. Do not automatically mark a new host or a search snippet verified. Additional web extraction formats need evidence-preserving parsers, not guessed company/title fields. If you implement human-reviewed LIKELY_GENUINE, persist the reviewer, timestamp and evidence before allowing export.
+
+Security defaults include ignored secrets/data, loopback binding, trusted Host checks, per-session CSRF tokens, Jinja escaping, CSP, normalized HTTP(S) links, no arbitrary application submissions, sanitized logs, and no AI tool execution. File paths and source JSON are trusted local configuration. Never expose this personal dashboard publicly without adding proper authentication and a production server.
+
+## Provider contracts referenced
+
+- [Firecrawl Search](https://docs.firecrawl.dev/api-reference/endpoint/search) and [Scrape](https://docs.firecrawl.dev/api-reference/endpoint/scrape)
+- [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html)
+- [Lever Postings API](https://github.com/lever/postings-api)
+- [Ashby public job postings API](https://developers.ashbyhq.com/docs/public-job-posting-api)
+- [Google Sheets values.batchUpdate](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets.values/batchUpdate)

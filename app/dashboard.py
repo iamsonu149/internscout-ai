@@ -1,0 +1,111 @@
+import secrets
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+from flask import Flask, abort, redirect, render_template, request, session, url_for
+
+from app.database.repository import STATUSES, Repository
+from app.services.verifier import EXPORTABLE
+
+
+def create_app(settings):
+    app = Flask(__name__)
+    app.secret_key = secrets.token_hex(32)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Strict",
+        MAX_CONTENT_LENGTH=16384,
+        TRUSTED_HOSTS=["127.0.0.1", "localhost"],
+    )
+    repo = Repository(settings.database_path)
+
+    @app.before_request
+    def local_only():
+        if request.remote_addr not in ("127.0.0.1", "::1", None):
+            abort(403)
+        if "csrf" not in session:
+            session["csrf"] = secrets.token_urlsafe(32)
+
+    @app.after_request
+    def secure(response):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/")
+    def index():
+        all_jobs = repo.jobs()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=settings.recheck_days)).isoformat()
+        for job in all_jobs:
+            job["fresh"] = job["last_seen"] >= cutoff
+            if job.get("deadline"):
+                try:
+                    job["fresh"] = job["fresh"] and date.fromisoformat(job["deadline"][:10]) >= date.today()
+                except ValueError:
+                    job["fresh"] = False
+            job["trusted"] = job["verification_status"] in EXPORTABLE and job["fresh"]
+        counts = {s: sum(j["status"] == s for j in all_jobs) for s in STATUSES}
+        counts["STRONG"] = sum(j["match"]["match_score"] >= 80 and j["trusted"] for j in all_jobs)
+        counts["VERIFIED"] = sum(j["trusted"] for j in all_jobs)
+        view = request.args.get("view", "ALL")
+        query = request.args.get("q", "").strip().lower()
+        jobs = [
+            j
+            for j in all_jobs
+            if (
+                view == "ALL"
+                or j["status"] == view
+                or view == "STRONG"
+                and j["match"]["match_score"] >= 80
+                and j["trusted"]
+                or view == "VERIFIED"
+                and j["trusted"]
+            )
+            and (
+                not query or query in (j["company"] + " " + j["title"] + " " + (j["location"] or "")).lower()
+            )
+        ]
+        sort = request.args.get("sort", "match")
+        jobs.sort(
+            key=lambda j: j["match"]["match_score"] if sort == "match" else j["discovered_at"], reverse=True
+        )
+        runs = repo.runs()
+        return render_template(
+            "dashboard.html",
+            jobs=jobs,
+            all_count=len(all_jobs),
+            counts=counts,
+            view=view,
+            query=query,
+            sort=sort,
+            runs=runs,
+            last=runs[0] if runs else None,
+            settings=settings,
+            statuses=sorted(STATUSES),
+            csrf=session["csrf"],
+            profile_exists=Path(settings.profile_path).exists(),
+        )
+
+    @app.post("/jobs/<int:job_id>/tracking")
+    def tracking(job_id):
+        if not secrets.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+            abort(403)
+        try:
+            changed = repo.update_tracking(
+                job_id, request.form.get("status", ""), request.form.get("notes", "")
+            )
+        except ValueError:
+            abort(400)
+        if not changed:
+            abort(404)
+        return redirect(url_for("index"), code=303)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    return app
