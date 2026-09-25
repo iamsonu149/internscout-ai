@@ -37,15 +37,25 @@ class FakeSheets(GoogleSheets):
 
 
 def test_tracking_columns_are_never_overwritten():
-    row = [""] * 19
-    row[15], row[17], row[18] = item()["application_url"], "APPLIED", "My note"
+    row = [""] * len(HEADERS)
+    row[13], row[14] = item()["source_url"], "APPLIED"
     sheet = FakeSheets([HEADERS, row])
     assert sheet.sync([item()])["sheet_added"] == 0
-    assert sheet.writes[0]["range"] == "'Opportunities'!B2:Q2"
-    assert len(sheet.writes[0]["values"][0]) == 16
+    assert sheet.writes[0]["range"] == "'Opportunities'!B2:N2"
+    assert len(sheet.writes[0]["values"][0]) == 13
 
 
 def test_no_unverified_exports_and_deduplicate_same_batch():
     sheet = FakeSheets([HEADERS])
     assert sheet.sync([dict(item(), verification_status="UNVERIFIED")])["sheet_added"] == 0
     assert sheet.sync([item(), item()])["sheet_added"] == 1
+
+
+def test_compact_schema_and_evaluation_time():
+    from app.services.google_sheets import RejectedSheets, format_evaluated, sheet_row
+
+    assert not {"Relevant Projects", "Source", "Application URL", "Notes"}.intersection(HEADERS)
+    assert len(sheet_row(item())) == len(HEADERS) == 15
+    assert len(RejectedSheets.headers) == 18
+    assert format_evaluated("2026-09-25T17:00:52.123456+00:00") == "2026-09-25 17:00"
+    assert format_evaluated("2026-09-25T17:00:52+05:30") == "2026-09-25 11:30"

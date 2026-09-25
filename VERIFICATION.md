@@ -57,3 +57,7 @@ Deployed at https://internscout-ai-psi.vercel.app using Python 3.13 and Vercel F
 
 53 tests pass, including document URL blocking before network calls, encoded PDF URLs, disabled PDF parsing/basic proxy request settings, paid-request timeout without retries, and weekly quality counts excluding weak, stale, expired or ineligible jobs. The workflow runs Monday/Wednesday/Friday/Sunday at 09:00 IST and requires score 80. It reports progress toward 14 strong matches per rolling seven days. The Razorpay public board was verified via its official careers page and fetched read-only successfully (25 postings), without Firecrawl. No paid discovery run was triggered during this change; attaining 14 weekly matches has not yet been demonstrated.
 
+
+## Compact sheet layout (2026-09-25)
+
+Removed Relevant Projects, Source, Application URL and Notes from both live tabs after a private local backup. Native column deletion preserved retained values, Status validation and formatting. Rejected Matches now displays Last Evaluated (UTC) as YYYY-MM-DD HH:MM. The dashboard reads by header name and uses Job URL when Application URL is absent. The reduced writer preserves Status and Date Found and deduplicates by Job URL/fingerprint. All 54 tests and Ruff checks pass. Production deployment succeeded; authenticated live opportunity and screened-out views returned 200 with existing rows, job links and no Sheets error. Both live headers pass sync initialization without writes. Formatting was inspected through cell metadata; no browser visual inspection was performed.

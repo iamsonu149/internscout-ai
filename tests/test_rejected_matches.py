@@ -63,14 +63,14 @@ def rejected_item():
     return item() | {"rejection_reasons": ["Graduation cohort incompatible"], "decision": "EXCLUDED"}
 
 
-def test_rejection_sync_deduplicates_and_preserves_notes():
+def test_rejection_sync_deduplicates_and_preserves_status():
     sheet = FakeRejected([RejectedSheets.headers])
     assert sheet.sync([rejected_item(), rejected_item()])["rejected_sheet_added"] == 1
-    assert sheet.writes[0]["values"][0][19] == "Graduation cohort incompatible"
+    assert sheet.writes[0]["values"][0][15] == "Graduation cohort incompatible"
     row = sheet.writes[0]["values"][0]
-    row[17:19] = ["SAVED", "Check with recruiter"]
+    row[14] = "SAVED"
     sheet = FakeRejected([RejectedSheets.headers, row])
     result = sheet.sync([rejected_item() | {"decision": "NOW MATCHED"}])
     assert result["rejected_sheet_added"] == 0
-    assert all("R2" not in write["range"] and "S2" not in write["range"] for write in sheet.writes)
+    assert all("O2" not in write["range"] for write in sheet.writes)
     assert sheet.writes[1]["values"][0][1] == "NOW MATCHED"

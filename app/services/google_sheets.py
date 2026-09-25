@@ -24,15 +24,11 @@ HEADERS = [
     "Eligibility",
     "Matching Skills",
     "Missing Skills",
-    "Relevant Projects",
     "Stipend/Salary",
     "Deadline",
-    "Source",
     "Verification Status",
-    "Application URL",
     "Job URL",
     "Status",
-    "Notes",
 ]
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
@@ -53,6 +49,14 @@ def authorized_session(settings):
     return AuthorizedSession(cred)
 
 
+def format_evaluated(value):
+    return (
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        .astimezone(timezone.utc)
+        .strftime("%Y-%m-%d %H:%M")
+    )
+
+
 def sheet_row(item):
     match = item["match"]
     return [
@@ -66,21 +70,17 @@ def sheet_row(item):
         match["eligibility"],
         ", ".join(match["matching_skills"]),
         ", ".join(match["missing_skills"]),
-        ", ".join(match["relevant_projects"]),
         item.get("salary_or_stipend") or "Unknown",
         item.get("deadline") or "Unknown",
-        item["source_type"],
         item["verification_status"],
-        item["application_url"],
         item["source_url"],
         item.get("status", "NEW"),
-        item.get("notes", ""),
     ]
 
 
 class GoogleSheets:
     headers = HEADERS
-    end_column = "S"
+    end_column = "O"
 
     def __init__(self, settings, session=None, sleep=time.sleep):
         self.settings = settings
@@ -179,8 +179,8 @@ class GoogleSheets:
                                 "range": {
                                     "sheetId": sheet_id,
                                     "startRowIndex": 1,
-                                    "startColumnIndex": 17,
-                                    "endColumnIndex": 18,
+                                    "startColumnIndex": 14,
+                                    "endColumnIndex": 15,
                                 },
                                 "rule": {
                                     "condition": {
@@ -210,7 +210,7 @@ class GoogleSheets:
     def read_rows(self):
         return self.call(
             "GET",
-            "/values/" + quote(f"{self.tab}!A:{self.end_column}", safe=""),
+            "/values/" + quote(f"{self.tab}!A:V", safe=""),
             params={"valueRenderOption": "UNFORMATTED_VALUE"},
         ).get("values", [])
 
@@ -222,9 +222,9 @@ class GoogleSheets:
         rows = self.initialize()
         urls, fingerprints = {}, {}
         for number, raw in enumerate(rows[1:], 2):
-            row = raw + [""] * (19 - len(raw))
+            row = raw + [""] * (len(self.headers) - len(raw))
             try:
-                urls[normalize_url(row[15])] = (number, row)
+                urls[normalize_url(row[13])] = (number, row)
             except (ValueError, TypeError):
                 pass
             if row[1] and row[2]:
@@ -244,24 +244,24 @@ class GoogleSheets:
                 except ValueError:
                     expired = True
             if expired:
-                row[14] = "REJECTED"
+                row[12] = "REJECTED"
                 row[7] = "Deadline passed or invalid — do not apply without rechecking"
             elif not fresh:
-                row[14] = "UNVERIFIED"
+                row[12] = "UNVERIFIED"
                 row[7] = "Stale evidence — recheck original posting"
             fp = fingerprint(
                 Job(
                     title=item["title"], company=item["company"], location=item.get("location"), source_url=""
                 )
             )
-            key = normalize_url(item["application_url"])
+            key = normalize_url(item["source_url"])
             old = urls.get(key) or fingerprints.get(fp)
             if old:
                 number, previous = old
                 # Sheet owns tracking after export; preserve it and mirror valid values locally.
-                if repo and previous[17] in {"NEW", "SAVED", "APPLIED", "INTERVIEW", "REJECTED", "CLOSED"}:
-                    repo.update_tracking(item["id"], previous[17], str(previous[18]))
-                writes.append({"range": f"{self.tab}!B{number}:Q{number}", "values": [row[1:17]]})
+                if repo and previous[14] in {"NEW", "SAVED", "APPLIED", "INTERVIEW", "REJECTED", "CLOSED"}:
+                    repo.update_tracking(item["id"], previous[14], item.get("notes", ""))
+                writes.append({"range": f"{self.tab}!B{number}:N{number}", "values": [row[1:14]]})
                 updated += 1
             elif (
                 item["verification_status"] in EXPORTABLE
@@ -269,7 +269,7 @@ class GoogleSheets:
                 and fresh
                 and not expired
             ):
-                writes.append({"range": f"{self.tab}!A{next_row}:S{next_row}", "values": [row]})
+                writes.append({"range": f"{self.tab}!A{next_row}:O{next_row}", "values": [row]})
                 urls[key] = (next_row, row)
                 fingerprints[fp] = (next_row, row)
                 next_row += 1
@@ -307,7 +307,7 @@ class RejectedSheets(GoogleSheets):
     """Audit tab only: excluded listings are never endorsed as accepted opportunities."""
 
     headers = HEADERS + ["Rejection Reason", "Screening Decision", "Last Evaluated (UTC)"]
-    end_column = "V"
+    end_column = "R"
 
     def __init__(self, settings, session=None, sleep=time.sleep):
         if settings.rejected_sheet_tab == settings.sheet_tab:
@@ -319,7 +319,7 @@ class RejectedSheets(GoogleSheets):
         urls, fingerprints = {}, {}
         for number, raw in enumerate(rows[1:], 2):
             row = raw + [""] * (len(self.headers) - len(raw))
-            for url in (row[15], row[16]):
+            for url in (row[13],):
                 try:
                     urls[normalize_url(url)] = number
                 except ValueError:
@@ -332,8 +332,11 @@ class RejectedSheets(GoogleSheets):
         next_row = max(2, len(rows) + 1)
         for item in items:
             row = sheet_row(item)
-            row[15] = item.get("application_url") or ""
-            row += ["; ".join(item["rejection_reasons"]), item["decision"], item["last_seen"]]
+            row += [
+                "; ".join(item["rejection_reasons"]),
+                item["decision"],
+                format_evaluated(item["last_seen"]),
+            ]
             fp = fingerprint(
                 Job(
                     title=item["title"], company=item["company"], location=item.get("location"), source_url=""
@@ -347,17 +350,17 @@ class RejectedSheets(GoogleSheets):
                     pass
             number = next((urls[k] for k in keys if k in urls), None) or fingerprints.get(fp)
             if number:
-                # Preserve Date Found and user-managed Status/Notes, just like the main tab.
+                # Preserve Date Found and user-managed Status, just like the main tab.
                 writes.extend(
                     [
-                        {"range": f"{self.tab}!B{number}:Q{number}", "values": [row[1:17]]},
-                        {"range": f"{self.tab}!T{number}:V{number}", "values": [row[19:22]]},
+                        {"range": f"{self.tab}!B{number}:N{number}", "values": [row[1:14]]},
+                        {"range": f"{self.tab}!P{number}:R{number}", "values": [row[15:18]]},
                     ]
                 )
                 updated += 1
             else:
                 number = next_row
-                writes.append({"range": f"{self.tab}!A{number}:V{number}", "values": [row]})
+                writes.append({"range": f"{self.tab}!A{number}:R{number}", "values": [row]})
                 next_row += 1
                 added += 1
             for key in keys:

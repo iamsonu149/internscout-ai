@@ -108,7 +108,7 @@ Allowed ATS hostnames include Greenhouse, Lever, Ashby, and Workable. Public API
 
 For website extraction, V1 requires exactly one `JobPosting` JSON-LD object. Pages with only prose, multiple postings, login walls, malformed data, or no application link/form are excluded. This is a deliberate false-negative tradeoff; it does **not** imply an excluded listing is fake. Add a public ATS board to improve coverage without extra Firecrawl scrapes.
 
-No system can guarantee every live listing remains open or every employer is genuine. Verification records what was observed, not an endorsement. Old evidence is labelled stale in the dashboard; sync excludes stale jobs from new exports and changes existing stale sheet rows to UNVERIFIED. Explicit deadlines are rechecked at sync. Status and Notes remain yours, even when evidence changes. Deleted ATS posts become stale when not seen again; they are not automatically marked CLOSED merely because a feed temporarily omits them.
+No system can guarantee every live listing remains open or every employer is genuine. Verification records what was observed, not an endorsement. Old evidence is labelled stale in the dashboard; sync excludes stale jobs from new exports and changes existing stale sheet rows to UNVERIFIED. Explicit deadlines are rechecked at sync. Status remains yours, even when evidence changes. Deleted ATS posts become stale when not seen again; they are not automatically marked CLOSED merely because a feed temporarily omits them.
 
 ## Firecrawl setup and budgets
 
@@ -148,7 +148,7 @@ The spreadsheet now has two output tabs:
 - **Opportunities**: jobs that pass verification, eligibility, and the minimum match score.
 - **Rejected Matches**: an audit of technical internships with at least one matching skill that were excluded. Includes **Rejection Reason**, **Screening Decision**, and **Last Evaluated (UTC)** in addition to the usual job and match columns. Examples: incompatible graduation cohort, unclear India eligibility, unverified source, expired listing, or a score below the threshold.
 
-Rejected Matches is an audit, not a list of recommended or verified openings. The Verification Status column retains the actual evidence status. Unrelated jobs and unextractable search snippets are not inserted. Rejection means the app excluded the listing, not that the employer rejected an application. Status and Notes remain user-managed in both tabs. If a rejected listing later qualifies, it is added to Opportunities and its audit entry becomes **NOW MATCHED**; the historical rejection reason and notes are retained. Existing tracked opportunities are not deleted if later excluded, preserving your application history.
+Rejected Matches is an audit, not a list of recommended or verified openings. The Verification Status column retains the actual evidence status. Unrelated jobs and unextractable search snippets are not inserted. Rejection means the app excluded the listing, not that the employer rejected an application. Status remains user-managed in both tabs. If a rejected listing later qualifies, it is added to Opportunities and its audit entry becomes **NOW MATCHED**; the historical rejection reason is retained. Existing tracked opportunities are not deleted if later excluded, preserving your application history.
 
 Both `search` and `sync` synchronize both tabs. `GOOGLE_REJECTED_SHEET_TAB` changes the audit tab name (default `Rejected Matches`); it must differ from `GOOGLE_SHEET_TAB`. The additive `rejected_matches` SQLite table stores these records separately from accepted jobs. It does not require external AI or additional Firecrawl requests. Jobs excluded before this feature was enabled cannot be reconstructed from snippets; they appear after being processed again.
 
@@ -193,11 +193,11 @@ Do not commit OAuth client files, refresh tokens, or service-account keys. Authe
 
 ### Columns, deduplication and ownership
 
-The sheet has: Date Found, Company, Job Title, Location, Remote, Internship Type, Match Score, Eligibility, Matching Skills, Missing Skills, Relevant Projects, Stipend/Salary, Deadline, Source, Verification Status, Application URL, Job URL, Status, Notes.
+The sheet has: Date Found, Company, Job Title, Location, Remote, Internship Type, Match Score, Eligibility, Matching Skills, Missing Skills, Stipend/Salary, Deadline, Verification Status, Job URL, Status.
 
 New jobs start with `NEW`. Supported tracking states: `NEW`, `SAVED`, `APPLIED`, `INTERVIEW`, `REJECTED`, `CLOSED`.
 
-Application URLs and company/title/location fingerprints are checked against the sheet itself, including after a local database loss. Existing rows update **B:Q only**. Date Found, Status, and Notes are preserved. Sheet tracking values are mirrored locally during sync. Local dashboard tracking is useful before export; after export, edit tracking **in the sheet** because sheet values win on the next sync.
+Job URLs and company/title/location fingerprints are checked against the sheet itself, including after a local database loss. Existing rows update **B:N only**. Date Found and Status are preserved. Sheet tracking values are mirrored locally during sync. Local dashboard tracking is useful before export; after export, edit tracking **in the sheet** because sheet values win on the next sync.
 
 Writes use `RAW` values, so text starting with `=` is not executed as a spreadsheet formula. Fixed row ranges make transport retries idempotent. A local file lock prevents simultaneous local search/sync processes; GitHub concurrency prevents overlapping scheduled runs. **Do not run a local writer and GitHub writer simultaneously against the same tab**, and avoid sorting/inserting/deleting rows while sync runs. There is no distributed lock or Google Sheets transactional compare-and-swap in V1. Existing duplicate rows are preserved rather than deleted.
 
@@ -226,7 +226,7 @@ External AI is off by default. When explicitly configured, only already verified
 
 ### Dashboard connected to Google Sheets
 
-When `GOOGLE_SHEET_ID` and Google credentials are configured, the dashboard reads Opportunities and Rejected Matches directly, including cloud-discovered jobs and user-edited Status/Notes. **Screened out** shows the rejection audit separately from your own application statuses. **Refresh from Sheets** bypasses the one-minute in-memory cache; ordinary navigation reuses it. Reading the dashboard never initializes tabs, exports jobs, calls Firecrawl, or changes sheet cells. Edit status/notes using its Google Sheets link. A failed refresh displays a warning and retains the last loaded snapshot; it does not silently substitute an empty local database. The dashboard shows sheet load time, not an invented cloud search/verification timestamp. Full per-component score details and cloud run metrics are not present in the sheet and are not reconstructed.
+When `GOOGLE_SHEET_ID` and Google credentials are configured, the dashboard reads Opportunities and Rejected Matches directly, including cloud-discovered jobs and user-edited Status. **Screened out** shows the rejection audit separately from your own application statuses. **Refresh from Sheets** bypasses the one-minute in-memory cache; ordinary navigation reuses it. Reading the dashboard never initializes tabs, exports jobs, calls Firecrawl, or changes sheet cells. Edit status using its Google Sheets link. A failed refresh displays a warning and retains the last loaded snapshot; it does not silently substitute an empty local database. The dashboard shows sheet load time, not an invented cloud search/verification timestamp. Full per-component score details and cloud run metrics are not present in the sheet and are not reconstructed.
 
 Without a configured spreadsheet, the local SQLite view and local tracking forms remain available. Google credentials stay server-side. Public dashboard deployment is optional and separate from scheduled discovery: the existing GitHub automation already runs without your laptop. This server is still loopback-only; opening the dashboard from another device would require a separately secured deployment with authentication, HTTPS and server-side secrets.
 
@@ -323,3 +323,7 @@ The scheduled workflow requires a match score of at least 80 alongside source ve
 Four scheduled runs allow at most 24 search requests (120 result slots) and 48 scrape requests per week. These are request limits, not an account-wide credit cap: manual runs and other apps using the same account are separate. Review provider usage before increasing limits.
 
 PDF and proxy safeguards follow the [Firecrawl scraping guide](https://github.com/firecrawl/firecrawl-docs/blob/main/advanced-scraping-guide.mdx) and [proxy documentation](https://docs.firecrawl.dev/features/stealth-mode).
+
+### Compact spreadsheet columns
+
+Both tabs omit Relevant Projects, Source, Application URL and Notes. Job URL remains the posting link and deduplication key; the hosted dashboard opens this URL. Status remains user-managed and is preserved by synchronization. Last Evaluated (UTC) uses `YYYY-MM-DD HH:MM`, without seconds. Internal application URLs are still required to verify destinations, but are not exported as a separate column. Existing user notes are not collected from the sheet. The hosted reader accepts both old and compact header layouts during deployment; exports require the exact compact headers.
