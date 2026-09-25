@@ -1,4 +1,47 @@
 {
-  "boards": [{"type": "greenhouse", "slug": "razorpaysoftwareprivatelimited", "company": "Razorpay", "verified_from": "https://razorpay.com/careers/", "verified_on": "2026-09-25"}],
+  "boards": [
+    {
+      "type": "greenhouse",
+      "slug": "razorpaysoftwareprivatelimited",
+      "company": "Razorpay",
+      "verified_from": "https://razorpay.com/careers/",
+      "verified_on": "2026-09-25"
+    },
+    {
+      "company": "Sarvam AI",
+      "type": "ashby",
+      "slug": "sarvam",
+      "verified_from": "https://www.sarvam.ai/careers",
+      "verified_on": "2026-09-25"
+    },
+    {
+      "company": "Supabase",
+      "type": "ashby",
+      "slug": "supabase",
+      "verified_from": "https://www.supabase.com/careers",
+      "verified_on": "2026-09-25"
+    },
+    {
+      "company": "Deepgram",
+      "type": "ashby",
+      "slug": "Deepgram",
+      "verified_from": "https://deepgram.com/company/careers",
+      "verified_on": "2026-09-25"
+    },
+    {
+      "company": "Browserbase",
+      "type": "ashby",
+      "slug": "browserbase",
+      "verified_from": "https://www.browserbase.com/careers",
+      "verified_on": "2026-09-25"
+    },
+    {
+      "type": "greenhouse",
+      "slug": "instabase",
+      "company": "Instabase",
+      "verified_from": "https://www.instabase.com/careers/jobs",
+      "verified_on": "2026-09-25"
+    }
+  ],
   "official_domains": {}
 }

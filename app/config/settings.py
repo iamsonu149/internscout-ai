@@ -16,6 +16,8 @@ class Settings:
     max_scrapes: int = 8
     min_match_score: int = 60
     recheck_days: int = 7
+    weekly_credit_limit: int = 400
+    max_rechecks: int = 8
     sheet_id: str = ""
     sheet_tab: str = "Opportunities"
     rejected_sheet_tab: str = "Rejected Matches"
@@ -47,6 +49,8 @@ class Settings:
             "min_match_score",
             "recheck_days",
             "max_llm_calls",
+            "weekly_credit_limit",
+            "max_rechecks",
         }
         defaults = cls()
         values = {}
@@ -63,6 +67,8 @@ class Settings:
             and 0 <= obj.max_llm_calls <= 30
             and 0 <= obj.min_match_score <= 100
             and obj.recheck_days >= 1
+            and 0 <= obj.weekly_credit_limit <= 10000
+            and 0 <= obj.max_rechecks <= 30
         ):
             raise ValueError("Invalid budget, score, or recheck configuration")
         if obj.dashboard_mode not in {"local", "hosted"}:

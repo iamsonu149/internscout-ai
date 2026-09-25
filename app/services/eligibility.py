@@ -96,4 +96,47 @@ def evaluate(job, profile, today=None):
         reasons.append("Graduate-level education required or ambiguous")
     if not job.deadline:
         concerns.append("No deadline published; availability can change")
+    # Specific degree labels are not interchangeable with the user's BS Data Science.
+    if re.search(r"(?:b\.?tech|b\.?e\.?|bachelor of (?:technology|engineering)).{0,35}\bonly\b", text, re.I):
+        if not re.search(
+            r"B\.?Tech|Bachelor of (?:Technology|Engineering)", profile.get("education", ""), re.I
+        ):
+            reasons.append("Restricted to BTech/BE; profile lists a BS degree")
+    elif re.search(r"computer science|computer engineering", text, re.I) and not re.search(
+        r"data science|related (?:field|discipline)|equivalent", text, re.I
+    ):
+        concerns.append("Degree wording names CS/Computer Engineering; confirm BS Data Science eligibility")
+    availability = profile.get("availability", {})
+    if (
+        re.search(r"full[ -]time", text + " " + (job.employment_type or ""), re.I)
+        and availability.get("full_time") is False
+    ):
+        reasons.append("Full-time commitment conflicts with availability")
+    hours = re.search(r"(\d{1,2})\s*hours?\s*(?:per|a|/)\s*day", text, re.I)
+    if (
+        hours
+        and availability.get("max_hours_per_day") is not None
+        and int(hours[1]) > availability["max_hours_per_day"]
+    ):
+        reasons.append("Daily hours exceed stated availability")
+    duration = re.search(r"(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*months?", text, re.I)
+    if (
+        duration
+        and availability.get("max_months") is not None
+        and int(duration[1]) > availability["max_months"]
+    ):
+        reasons.append("Required duration exceeds availability")
+    start = re.search(
+        r"(?:start(?:ing)? date|starts? on|start from)\s*:?\s*(20\d{2}-\d{2}-\d{2})", text, re.I
+    )
+    if start:
+        try:
+            start_date = date.fromisoformat(start[1])
+            available_from = availability.get("available_from")
+            if available_from and start_date < date.fromisoformat(available_from):
+                reasons.append("Required start date is before availability")
+        except ValueError:
+            concerns.append("Start date could not be interpreted reliably")
+    else:
+        concerns.append("Confirm start date with employer")
     return Eligibility(not reasons, concerns, reasons)

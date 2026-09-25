@@ -77,5 +77,13 @@
   "achievements": [
     "600+ LeetCode/DSA problems",
     "120+ day problem-solving streak"
-  ]
+  ],
+  "availability": {
+    "full_time": true,
+    "max_hours_per_day": 10,
+    "max_months": null,
+    "available_from": "2026-09-25",
+    "locations": "Any India location; eligible remote roles",
+    "relocation_within_india": true
+  }
 }

@@ -19,9 +19,11 @@ jobs:
       GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
       GOOGLE_SHEET_TAB: ${{ vars.GOOGLE_SHEET_TAB || 'Opportunities' }}
       GOOGLE_REJECTED_SHEET_TAB: ${{ vars.GOOGLE_REJECTED_SHEET_TAB || 'Rejected Matches' }}
-      MAX_QUERIES: ${{ vars.MAX_QUERIES || '6' }}
-      MAX_SCRAPES: ${{ vars.MAX_SCRAPES || '12' }}
-      RESULTS_PER_QUERY: ${{ vars.RESULTS_PER_QUERY || '5' }}
+      MAX_QUERIES: ${{ vars.MAX_QUERIES || '8' }}
+      MAX_SCRAPES: ${{ vars.MAX_SCRAPES || '24' }}
+      RESULTS_PER_QUERY: ${{ vars.RESULTS_PER_QUERY || '10' }}
+      WEEKLY_CREDIT_LIMIT: '400'
+      MAX_RECHECKS: '8'
       MIN_MATCH_SCORE: '80'
       DATABASE_PATH: data/internscout.db
     steps:
@@ -37,6 +39,8 @@ jobs:
           key: internscout-db-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: internscout-db-
       - run: python -m pip install -r requirements.txt
+      - name: Require restored spending history
+        run: python -c "from pathlib import Path; assert Path('data/internscout.db').is_file(), 'Missing spending history; refusing paid discovery. Restore the database cache before retrying.'"
       - name: Require output configuration
         run: python -c "import os; assert os.getenv('GOOGLE_SHEET_ID') and os.getenv('GOOGLE_CREDENTIALS_JSON'), 'Configure Google Sheet and service-account secrets before enabling this workflow'"
       - name: Discover, verify, match and sync
@@ -47,3 +51,10 @@ jobs:
         with:
           path: data/
           key: internscout-db-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save weekly report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report-${{ github.run_id }}
+          path: data/weekly-report.json
+          retention-days: 30

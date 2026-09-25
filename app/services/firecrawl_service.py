@@ -1,6 +1,8 @@
+import math
 import re
 from urllib.parse import unquote
 
+from app.services.credit_budget import BudgetExceeded
 from app.services.http import Http, ProviderError
 
 
@@ -29,13 +31,37 @@ def queries_for(profile, day_index=0):
 
 
 class Firecrawl:
-    def __init__(self, key, http=None):
+    def __init__(self, key, http=None, budget=None):
         self.key = key
         self.http = http or Http()
+        self.budget = budget
+        self.account_available = None
+
+    def account_credits(self):
+        result = self.http.json(
+            "GET",
+            "https://api.firecrawl.dev/v2/team/credit-usage",
+            headers={"Authorization": f"Bearer {self.key}"},
+            attempts=1,
+        )
+        value = (result.get("data") or {}).get("remainingCredits")
+        if result.get("success") is not True or type(value) is not int or value < 0:
+            raise ProviderError("Credit balance could not be verified")
+        self.account_available = value
+        return value
 
     def _call(self, endpoint, payload):
         if not self.key:
             raise ProviderError("FIRECRAWL_API_KEY is not configured")
+        cost = 2 * math.ceil(payload["limit"] / 10) if endpoint == "search" else 1
+        reservation = None
+        if self.budget:
+            if self.account_available is None:
+                self.account_credits()
+            if self.account_available < cost:
+                raise BudgetExceeded("Insufficient verified account credit balance")
+            reservation = self.budget.reserve(endpoint, cost)
+            self.account_available -= cost
         result = self.http.json(
             "POST",
             f"https://api.firecrawl.dev/v2/{endpoint}",
@@ -45,6 +71,13 @@ class Firecrawl:
         )
         if not isinstance(result, dict) or result.get("success") is not True:
             raise ProviderError("Firecrawl request was unsuccessful")
+        if reservation is not None:
+            data = result.get("data") or {}
+            metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
+            reported = result.get("creditsUsed", metadata.get("creditsUsed"))
+            self.budget.finish(reservation, reported, result.get("id") or metadata.get("scrapeId"))
+            if type(reported) is int and reported > cost:
+                self.account_available -= reported - cost
         return result.get("data")
 
     def search(self, query, limit=5):

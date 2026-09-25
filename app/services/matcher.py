@@ -60,12 +60,33 @@ def mentions(text, skill):
     )
 
 
+def skill_requirements(job):
+    required_text = " ".join(job.requirements)
+    preferred_text = " ".join(job.preferred_skills)
+    general = []
+    for part in re.split(r"\n|(?<=[.;])\s+", job.description):
+        if re.search(r"preferred|nice.to.have|bonus|not required|optional", part, re.I):
+            preferred_text += " " + part
+        elif re.search(r"\brequired\b|\bmust\b|essential|minimum qualifications", part, re.I):
+            required_text += " " + part
+        else:
+            general.append(part)
+    required = [s for s in SKILLS if mentions(required_text, s)]
+    preferred = [s for s in SKILLS if mentions(preferred_text, s) and s not in required]
+    general_skills = [
+        s for s in SKILLS if mentions(" ".join(general), s) and s not in required and s not in preferred
+    ]
+    return required, preferred, general_skills
+
+
 def match_job(job, profile, eligibility):
     text = " ".join([job.description, *job.requirements, *job.preferred_skills])
     demanded = [s for s in SKILLS if mentions(text, s)]
     known = {s.lower() for s in profile["skills"]}
     matching = [s for s in demanded if s.lower() in known]
     missing = [s for s in demanded if s.lower() not in known]
+    required, preferred, general = skill_requirements(job)
+    weights = {s: 2 if s in required else 0.5 if s in preferred else 1 for s in demanded}
     projects = [
         p["name"]
         for p in profile["projects"]
@@ -82,7 +103,7 @@ def match_job(job, profile, eligibility):
     experience = any(mentions(" ".join(profile["experience"]), skill) for skill in matching)
     breakdown = {
         "role": 30 if primary else 22,
-        "skills": round(30 * len(matching) / len(demanded)) if demanded else 0,
+        "skills": round(30 * sum(weights[s] for s in matching) / sum(weights.values())) if demanded else 0,
         "eligibility": 20
         if eligibility.accepted and job.graduation_requirement
         else 12
@@ -92,9 +113,14 @@ def match_job(job, profile, eligibility):
         "experience_projects": (5 if experience else 0) + (5 if projects else 0),
     }
     concerns = eligibility.concerns + eligibility.reasons
+    required_gaps = [s for s in required if s.lower() not in known]
+    if required_gaps:
+        concerns = concerns + [
+            "Review required-skill gaps (alternatives may be acceptable): " + ", ".join(required_gaps)
+        ]
     if not demanded:
         concerns = concerns + ["No recognized skill requirements extracted"]
-    reason = f"{'Primary' if primary else 'Secondary'} target role; {len(matching)}/{len(demanded)} recognized skills overlap."
+    reason = f"{'Primary' if primary else 'Secondary'} target role; {len(matching)}/{len(demanded)} recognized skills overlap. Required skills carry more weight than preferred skills."
     return Match(
         sum(breakdown.values()),
         matching,

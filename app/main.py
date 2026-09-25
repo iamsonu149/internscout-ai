@@ -64,7 +64,19 @@ def main():
                         f"Shortfall: {result['weekly_shortfall']}. Quality filters are never relaxed.\n\n"
                         f"This run: {result['queries']} searches, {result['scraped']} scrape attempts, "
                         f"{result['added']} new matches, {result['errors']} errors.\n"
+                        f"\nPay evidence: {result['weekly_confirmed_pay']} confirmed; {result['weekly_undisclosed_pay']} undisclosed.\n"
+                        f"\nFirecrawl rolling 7 days: {result['credits_budgeted_7d']} / {result['credit_limit']} credits budgeted. "
+                        f"Provider-reported charges: {result['credits_provider_reported_7d']}; "
+                        f"{result['credit_requests_without_reported_cost']} requests lack reported cost and retain their reservations.\n"
+                        f"\nClosure checks: {result['closure_checked']}; confirmed closed: {result['confirmed_closed']}; inconclusive: {result['closure_unknown']}.\n"
                     )
+                    summary.write("\n### Rejection reasons observed in the last seven days\n\n")
+                    for reason, count in sorted(
+                        result["rejection_reasons"].items(), key=lambda pair: -pair[1]
+                    )[:15]:
+                        summary.write(f"- {count}: {reason}\n")
+            if os.getenv("GITHUB_ACTIONS"):
+                Path("data/weekly-report.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
             return 0 if result["state"] == "COMPLETED" else 1
         elif args.command == "sync":
             if not settings.sheet_id:

@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 from filelock import FileLock
 
 from app.database.repository import Repository
+from app.services.closure_check import check_closure
+from app.services.credit_budget import BudgetExceeded, CreditBudget
 from app.services.deduplicator import normalize_url
 from app.services.eligibility import evaluate
 from app.services.firecrawl_service import Firecrawl, queries_for
@@ -32,7 +34,8 @@ class Pipeline:
         self.repo = Repository(settings.database_path)
         self.profile = json.loads(Path(settings.profile_path).read_text(encoding="utf-8"))
         self.sources = json.loads(Path(settings.sources_path).read_text(encoding="utf-8"))
-        self.firecrawl = firecrawl or Firecrawl(settings.firecrawl_api_key)
+        self.credit_budget = CreditBudget(self.repo, settings.weekly_credit_limit)
+        self.firecrawl = firecrawl or Firecrawl(settings.firecrawl_api_key, budget=self.credit_budget)
         self.ats = ats or PublicATS()
         self.sheets = sheets
         self.analyzer = analyzer
@@ -58,6 +61,10 @@ class Pipeline:
             errors=0,
             sheet_added=0,
             sheet_updated=0,
+            budget_stopped=0,
+            closure_checked=0,
+            confirmed_closed=0,
+            closure_unknown=0,
         )
         event("SEARCH_STARTED", run_id=run_id)
         successful_sources = 0
@@ -67,7 +74,12 @@ class Pipeline:
                 try:
                     jobs = self.ats.fetch(board)
                     metrics["discovered"] += len(jobs)
-                    candidates.extend(jobs)
+                    # Avoid evaluating thousands of permanent roles as internship candidates.
+                    candidates.extend(
+                        j
+                        for j in jobs
+                        if re.search(r"\bintern(?:ship)?\b", j.title + " " + (j.employment_type or ""), re.I)
+                    )
                     successful_sources += 1
                 except Exception as exc:
                     metrics["errors"] += 1
@@ -115,6 +127,9 @@ class Pipeline:
                                 metrics["filtered"] += 1
                                 continue
                             urls.append(url)
+                    except BudgetExceeded:
+                        metrics["budget_stopped"] = 1
+                        break
                     except Exception as exc:
                         metrics["errors"] += 1
                         event("ERROR", stage="search", error_type=type(exc).__name__)
@@ -130,10 +145,35 @@ class Pipeline:
                             event("JOB_REJECTED", url=url, reason="No unambiguous structured JobPosting")
                             continue
                         self.process(job, metrics)
+                    except BudgetExceeded:
+                        metrics["budget_stopped"] = 1
+                        break
                     except Exception as exc:
                         metrics["errors"] += 1
                         self.repo.record_source(url, "ERROR")
                         event("ERROR", stage="scrape", url=url, error_type=type(exc).__name__)
+            # Recheck oldest saved postings; preserve the user's application Status.
+            allowed = ATS_HOSTS | set(self.sources.get("official_domains", {}))
+            rechecks = sorted(
+                (
+                    j
+                    for j in self.repo.jobs()
+                    if j["source_url"] not in seen and j["verification_status"] != "REJECTED"
+                ),
+                key=lambda j: j["last_seen"],
+            )
+            for job in rechecks[: self.settings.max_rechecks]:
+                result = check_closure(job["source_url"], allowed)
+                metrics["closure_checked"] += 1
+                if result == "CLOSED":
+                    metrics["confirmed_closed"] += 1
+                    self.repo.invalidate(
+                        job["source_url"],
+                        job["application_url"],
+                        ["Posting closed or removed on direct availability check"],
+                    )
+                else:
+                    metrics["closure_unknown"] += 1
             if not successful_sources:
                 metrics["errors"] += 1
                 event(
@@ -157,6 +197,13 @@ class Pipeline:
             event("ERROR", stage="pipeline", error_type=type(exc).__name__)
         finally:
             metrics.update(weekly_progress(self.repo.jobs(), self.profile))
+            metrics.update(self.credit_budget.summary())
+            recent_rejections = self.repo.rejections()
+            metrics["rejection_reasons"] = {}
+            for item in recent_rejections:
+                if item["last_seen"] >= self.credit_budget.cutoff() and item["decision"] != "NOW MATCHED":
+                    for reason in item["rejection_reasons"]:
+                        metrics["rejection_reasons"][reason] = metrics["rejection_reasons"].get(reason, 0) + 1
             self.repo.finish_run(run_id, metrics, locals().get("state", "FAILED"))
         event("SEARCH_COMPLETED", state=state, **metrics)
         return {"state": state, **metrics}

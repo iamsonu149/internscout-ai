@@ -68,7 +68,7 @@ def sheet_row(item):
         "Unknown" if item.get("remote") is None else "Yes" if item["remote"] else "No",
         item.get("employment_type") or "Internship (title)",
         match["match_score"],
-        match["eligibility"],
+        "; ".join([match["eligibility"], *match.get("eligibility_concerns", [])]),
         ", ".join(match["matching_skills"]),
         ", ".join(match["missing_skills"]),
         item.get("salary_or_stipend") or PAY_UNCONFIRMED,
@@ -237,6 +237,8 @@ class GoogleSheets:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=self.settings.recheck_days)).isoformat()
         for item in items:
             row = sheet_row(item)
+            if item["verification_status"] == "REJECTED":
+                row[7] = "; ".join(item.get("verification_reasons", [])) or "Posting no longer verified"
             paid = compensation_allowed(item.get("salary_or_stipend"), item.get("description", ""))
             if not paid:
                 row[7] = PAY_REASON

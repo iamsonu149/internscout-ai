@@ -118,13 +118,13 @@ No system can guarantee every live listing remains open or every employer is gen
 4. Run `python scripts/smoke_integrations.py --firecrawl` for one search and at most one scrape. This consumes your provider quota.
 5. Run discovery with `python main.py search --no-sync` until satisfied with the output.
 
-Local defaults cap each run at 3 searches and 8 scrapes, with 5 results per search. Scheduled runs use 6 searches and at most 12 scrapes. Paid Firecrawl requests are attempted once, without automatic retries. Search does not request automatic scraping. Document URLs are blocked; PDF parsers are explicitly disabled and proxies are restricted to basic. An opaque URL redirecting to a PDF can incur a base fetch charge, but no PDF page parsing is requested. Caps are **per run**, not per day. Read your Firecrawl account usage and reduce budgets or schedule frequency to stay within your allowance. Free-first does not guarantee unlimited free usage. The app never provisions paid infrastructure.
+Local defaults cap each run at 3 searches and 8 scrapes, with 5 results per search. Scheduled runs use 8 searches (10 results each) and at most 24 scrapes. Paid Firecrawl requests are attempted once, without automatic retries. Search does not request automatic scraping. Document URLs are blocked; PDF parsers are explicitly disabled and proxies are restricted to basic. An opaque URL redirecting to a PDF can incur a base fetch charge, but no PDF page parsing is requested. Caps are **per run**, not per day. Read your Firecrawl account usage and reduce budgets or schedule frequency to stay within your allowance. Free-first does not guarantee unlimited free usage. The app never provisions paid infrastructure.
 
 Firecrawl Search uses `/v2/search` with web results and no automatic scrape options. Scrape requests markdown and raw HTML, with a fresh fetch. API success and underlying page status are checked separately. Unknown/untrusted discovery domains are excluded before scraping. Successfully handled URLs are cached for `RECHECK_DAYS`; failed requests remain retryable.
 
 ## Public ATS sources and official domains
 
-`sources.json` includes Razorpay's public Greenhouse board, verified through https://razorpay.com/careers/ on 2026-09-25. These direct API reads do not use Firecrawl credits. Add boards only after verifying them via the company's official website:
+`sources.json` includes six employer boards: Razorpay, Sarvam AI, Supabase, Deepgram, Browserbase and Instabase. Each mapping records its official careers-page evidence and verification date. These direct API reads do not use Firecrawl credits. Add boards only after verifying them via the company's official website:
 
 ```json
 {
@@ -320,7 +320,7 @@ Rotate the dashboard password or signing key through Vercel environment settings
 
 The scheduled workflow requires a match score of at least 80 alongside source verification, geography, graduation, expiry and experience checks. It targets 20 new strong matches per rolling seven days, not a guaranteed quota. Logs and the GitHub run summary report the count and shortfall; the target never weakens filters or triggers unlimited paid searches. Unknown graduation wording remains an explicit caveat. Existing sheet rows are retained, not silently deleted.
 
-Four scheduled runs allow at most 24 search requests (120 result slots) and 48 scrape requests per week. These are request limits, not an account-wide credit cap: manual runs and other apps using the same account are separate. Review provider usage before increasing limits.
+Four scheduled runs allow at most 32 search requests (320 result slots) and 96 scrape requests per week, also subject to the rolling credit limit. The rolling 400-credit guard covers requests using the same restored InternScout database. Other apps and a separate laptop database are not covered by the cloud ledger. Review provider usage before increasing limits.
 
 PDF and proxy safeguards follow the [Firecrawl scraping guide](https://github.com/firecrawl/firecrawl-docs/blob/main/advanced-scraping-guide.mdx) and [proxy documentation](https://docs.firecrawl.dev/features/stealth-mode).
 
@@ -331,3 +331,17 @@ Both tabs omit Relevant Projects, Source, Application URL and Notes. Job URL rem
 ### Compensation policy
 
 Internships with undisclosed compensation are accepted if all other quality checks pass, with a visible pay-unconfirmed caveat. Explicitly unpaid, zero-pay or conditional-only compensation remains excluded. Benefits and company reputation do not prove pay. The dashboard includes historic unknown-pay listings with the same caveat; confirmed stipend information is preserved when available. The target remains 20 technical matches per rolling week, with score 80 and the existing four-day schedule and credit limits unchanged.
+
+### Coverage, eligibility, closure checks and spending audit
+
+The profile records full-time availability, up to 10 hours/day, no duration limit, and availability from 2026-09-25. Location remains India or remote with established India eligibility; overseas work authorization is not assumed. Explicit BTech/BE-only wording is rejected for the BS degree; CS-specific wording without related-field language is flagged for confirmation. Start dates and hours are compared only where explicit and parseable. Ambiguous wording remains a caveat, not invented eligibility.
+
+Required skill mentions carry twice the weight of general mentions; preferred mentions carry half the weight. Missing required skills appear as review concerns because postings may offer alternatives. The score remains a heuristic, not a hiring prediction. Eligibility concerns are exported in the existing Eligibility column.
+
+Up to eight saved postings per run receive bounded direct HTML availability checks at allowed hosts, without Firecrawl. Explicit closure text or HTTP 404/410 invalidates verification while preserving the user's Status/history. Timeouts, blocking, redirects to unrelated hosts, PDFs and generic careers pages remain inconclusive. Listings returned by a direct board are refreshed through the normal pipeline.
+
+The SQLite credit ledger atomically reserves credits before each paid request. Normal web searches reserve two credits per ten requested results (rounded up); basic HTML scrapes reserve one. These rates were checked against [Firecrawl's search documentation](https://docs.firecrawl.dev/features/search). Reported charges are stored separately, and the larger of reservation/reported cost counts toward the rolling seven-day ceiling. Missing responses/timeouts retain reservations. Historic pre-ledger runs receive conservative estimates; these are not invoices. A changed provider rate can exceed the reservation for the current request; any reported overage reduces further available budget.
+
+An authenticated [account credit-balance check](https://docs.firecrawl.dev/api-reference/endpoint/credit-usage) must succeed before the first paid request. Missing history in GitHub Actions blocks discovery rather than resetting the budget. The cache must be retained: deleting it, independent machines, other Firecrawl tools, or a process crash before cloud cache persistence are outside the ledger's guarantees. No API keys or provider response bodies are written to the ledger or report.
+
+Each cloud run includes a weekly summary and a downloadable `weekly-report.json` artifact: unique strong matches, confirmed/undisclosed pay, target shortfall, rejection reasons, closure checks, conservative budget usage and provider-reported charges. Paid budget exhaustion does not prevent direct company feeds or Sheet synchronization. A failed source is reported as partial coverage.
