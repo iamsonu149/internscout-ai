@@ -1,8 +1,10 @@
+import hashlib
+import hmac
 import secrets
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, Response, abort, redirect, render_template, request, session, url_for
+from flask import Flask, abort, redirect, render_template, request, session, url_for
 
 from app.database.repository import STATUSES, Repository
 from app.services.dashboard_feed import SheetDashboardFeed
@@ -23,37 +25,33 @@ def create_app(settings, sheet_feed=None):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=hosted,
+        PERMANENT_SESSION_LIFETIME=timedelta(days=365),
+        SESSION_REFRESH_EACH_REQUEST=True,
         MAX_CONTENT_LENGTH=16384,
         TRUSTED_HOSTS=[".vercel.app"] if hosted else ["127.0.0.1", "localhost"],
     )
     repo = None if hosted else Repository(settings.database_path)
     feed = sheet_feed or (SheetDashboardFeed(settings) if settings.sheet_id else None)
+    # Stable across deployments; rotating credentials or signing key invalidates old sessions.
+    auth_tag = hmac.new(
+        app.secret_key.encode(),
+        (settings.dashboard_username + "\0" + settings.dashboard_password).encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    def signed_in():
+        return secrets.compare_digest(str(session.get("authenticated", "")), auth_tag)
 
     @app.before_request
     def local_only():
-        if hosted:
-            auth = request.authorization
-            if (
-                not auth
-                or auth.type.lower() != "basic"
-                or not (
-                    secrets.compare_digest(
-                        (auth.username or "").encode(), settings.dashboard_username.encode()
-                    )
-                    and secrets.compare_digest(
-                        (auth.password or "").encode(), settings.dashboard_password.encode()
-                    )
-                )
-            ):
-                return Response(
-                    "Sign in to your private InternScout dashboard.",
-                    401,
-                    {"WWW-Authenticate": 'Basic realm="InternScout", charset="UTF-8"'},
-                )
-        elif request.remote_addr not in ("127.0.0.1", "::1", None):
+        if request.routing_exception is not None and request.routing_exception.code == 400:
+            abort(400)
+        if not hosted and request.remote_addr not in ("127.0.0.1", "::1", None):
             abort(403)
         if "csrf" not in session:
             session["csrf"] = secrets.token_urlsafe(32)
+        if hosted and request.endpoint not in {"login", "static"} and not signed_in():
+            return redirect(url_for("login"), code=303)
 
     @app.after_request
     def secure(response):
@@ -63,7 +61,44 @@ def create_app(settings, sheet_feed=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
+        if hosted:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         return response
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if not hosted or signed_in():
+            return redirect(url_for("index"), code=303)
+        error, status = None, 200
+        username = ""
+        remember = True
+        if request.method == "POST":
+            username = request.form.get("username", "")
+            remember = request.form.get("remember") == "on"
+            if not secrets.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+                error, status = "This sign-in page has expired. Please try again.", 400
+            elif secrets.compare_digest(
+                username.encode(), settings.dashboard_username.encode()
+            ) and secrets.compare_digest(
+                request.form.get("password", "").encode(), settings.dashboard_password.encode()
+            ):
+                session.clear()
+                session["authenticated"] = auth_tag
+                session["csrf"] = secrets.token_urlsafe(32)
+                session.permanent = remember
+                return redirect(url_for("index"), code=303)
+            else:
+                error, status = "That username or password isn't correct. Please try again.", 401
+        return render_template(
+            "login.html", csrf=session["csrf"], error=error, username=username, remember=remember
+        ), status
+
+    @app.post("/logout")
+    def logout():
+        if not secrets.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+            abort(403)
+        session.clear()
+        return redirect(url_for("login") if hosted else url_for("index"), code=303)
 
     @app.get("/")
     def index():

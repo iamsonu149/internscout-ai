@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#173f35">
+  <title>Welcome back · InternScout AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+  <script src="{{ url_for('static', filename='login.js') }}" defer></script>
+</head>
+<body>
+  <main class="login-shell">
+    <section class="story" aria-label="About InternScout">
+      <a class="wordmark" href="/login" aria-label="InternScout AI home"><span class="brand-mark">i<span>↗</span></span>InternScout <span class="ai-label">AI</span></a>
+      <div class="story-copy"><div class="overline"><span></span> YOUR NEXT CHAPTER</div><h1>Less searching.<br>More <em>possibility.</em></h1><p>A little clarity for your next big step.<br>Discover internships that fit your skills,<br>your ambitions, and where you want to go.</p></div>
+      <div class="preview" aria-hidden="true">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="floating-note"><span>✧</span> Made for your potential</div>
+        <div class="opportunity-preview"><div class="preview-top"><span class="preview-icon">↗</span><div><span class="preview-eyebrow">A LITTLE CLOSER TO WHAT'S NEXT</span><strong>Your next opportunity</strong></div><span class="preview-check">✓</span></div><div class="preview-line"></div><div class="preview-line short"></div><div class="preview-tags"><span>Python</span><span>Backend</span><span>India + remote</span></div><div class="preview-bottom"><span class="tiny-spark">✧</span> Thoughtful matches. Clear reasons.</div></div>
+        <div class="small-star">✦</div>
+      </div>
+      <div class="story-footer"><span class="outline-shield">◇</span><span>Private by design. Your next move is always yours.</span></div>
+    </section>
+    <section class="signin">
+      <div class="private-badge"><span></span> YOUR PRIVATE WORKSPACE</div>
+      <div class="form-wrap">
+        <div class="welcome-icon" aria-hidden="true">↗</div>
+        <p class="form-eyebrow">GOOD TO SEE YOU AGAIN</p>
+        <h2>Welcome back.</h2>
+        <p class="subtitle">Your next opportunity could be waiting.<br>Sign in to your InternScout workspace.</p>
+        {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+        <form method="post" action="{{ url_for('login') }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label for="username">Username</label>
+          <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-3a7 7 0 0 1 14 0v3"/></svg><input id="username" name="username" type="text" value="{{ username }}" placeholder="Enter your username" autocomplete="username" required maxlength="200" autofocus></div>
+          <label for="password">Password</label>
+          <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/><path d="M12 14v3"/></svg><input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password" required maxlength="1024"><button type="button" class="reveal" id="toggle-password" aria-label="Show password" aria-pressed="false" hidden>Show</button></div>
+          <label class="remember"><input type="checkbox" name="remember" {% if remember %}checked{% endif %}><span>Keep me signed in on this device</span></label>
+          <button type="submit" class="submit">Sign in to your workspace <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="credential-note">Your username and password don't expire automatically.</p>
+        <details class="login-help"><summary>Need help signing in?</summary><p>Use your existing InternScout username and password. They are saved in the private dashboard-login.txt file on your computer. If you clear browser cookies or sign out, just sign in again with the same credentials.</p><p>Keep me signed in remembers this browser for up to one year, renewed when you visit. Use it only on your own device.</p></details>
+      </div>
+      <footer><span>Discover thoughtfully. Apply confidently.</span><span>InternScout AI</span></footer>
+    </section>
+  </main>
+</body>
+</html>

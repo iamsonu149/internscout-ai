@@ -1,5 +1,11 @@
 # Implementation verification
 
+## Styled login and persistent sessions (2026-09-25)
+
+Replaced the browser Basic authentication prompt with a responsive branded login form, password visibility toggle, remembered sessions and CSRF-protected sign-out. Existing credentials remain unchanged and have no automatic expiration; remembered cookies last 365 days and renew on activity. All 46 tests pass, covering invalid logins, CSRF, secure cookies, logout, credential rotation and sessions surviving a new app instance. Ruff lint passed.
+
+Production deployment succeeded. Live HTTP checks verified anonymous redirects without a Basic challenge, successful sign-in with existing credentials, Secure/HttpOnly persistent cookies, an authenticated feed with 2 opportunity cards and no Sheets error, and logout preventing subsequent access. Login CSS and JavaScript both returned 200. Browser visual inspection was unavailable because the in-app browser webview failed to attach. This replaces the Basic authentication behavior described in the earlier deployment record below.
+
 Performed on 2026-09-24 in the provided Windows workspace with Python 3.13.5.
 
 | Check | Result |

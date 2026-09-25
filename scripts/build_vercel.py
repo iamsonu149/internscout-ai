@@ -5,4 +5,5 @@ from shutil import copyfile
 
 target = Path("public/static")
 target.mkdir(parents=True, exist_ok=True)
-copyfile("app/static/style.css", target / "style.css")
+for name in ("style.css", "login.css", "login.js"):
+    copyfile(Path("app/static") / name, target / name)

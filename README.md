@@ -295,7 +295,7 @@ Security defaults include ignored secrets/data, loopback binding, trusted Host c
 
 ### Private Vercel dashboard
 
-`wsgi.py` is the hosted entrypoint, configured via `tool.vercel.entrypoint`. The build copies only CSS into `public/static/`; `.vercelignore` excludes local secrets, databases and development files. Configure these Vercel production environment variables before deploying:
+`wsgi.py` is the hosted entrypoint, configured via `tool.vercel.entrypoint`. The build copies dashboard and login CSS plus the password-toggle script into `public/static/`; `.vercelignore` excludes local secrets, databases and development files. Configure these Vercel production environment variables before deploying:
 
 - `DASHBOARD_MODE=hosted`
 - `DASHBOARD_USERNAME=internscout`
@@ -304,9 +304,11 @@ Security defaults include ignored secrets/data, loopback binding, trusted Host c
 - `GOOGLE_SHEET_ID`, `GOOGLE_CREDENTIALS_JSON`
 - `GOOGLE_SHEET_TAB=Opportunities`, `GOOGLE_REJECTED_SHEET_TAB=Rejected Matches`
 
-Run `vercel --prod` using Vercel CLI 48.2.10 or later. The hosted app fails closed without the required login secrets. All Flask routes require HTTP Basic authentication over Vercel HTTPS, while public CSS contains no private data. The browser prompts for a username/password; use a private browser window when accessing from a shared device because browsers may remember Basic authentication until closed. The app accepts Vercel hostnames; configure explicit trusted hosts before adding a custom domain. It uses no SQLite database on Vercel. Firecrawl keys are not needed or uploaded for the dashboard. GitHub Actions remains responsible for daily discovery and sheet updates.
+Run `vercel --prod` using Vercel CLI 48.2.10 or later. The hosted app fails closed without the required login secrets. Private routes redirect to the styled `/login` page; login assets are public and contain no private data. Credentials have no automatic expiration. With **Keep me signed in** checked, a Secure, HttpOnly session cookie lasts 365 days and renews on activity. Without it, the cookie lasts for the browser session. Sessions survive redeployments while the configured credentials and signing key remain unchanged. Sign out or clear cookies to remove the browser's session; on shared devices, leave the checkbox unchecked and sign out when finished.
 
-Rotate the dashboard password through Vercel environment settings and redeploy if access needs to be revoked. In-memory cached data may be discarded on serverless cold starts; Google Sheets remains the source of truth. This personal single-user login is not a multi-user account system.
+The app accepts Vercel hostnames; configure explicit trusted hosts before adding a custom domain. It uses no SQLite database on Vercel. Firecrawl keys are not needed or uploaded for the dashboard. GitHub Actions remains responsible for daily discovery and sheet updates.
+
+Rotate the dashboard password or signing key through Vercel environment settings and redeploy to invalidate existing sessions. In-memory cached data may be discarded on serverless cold starts; Google Sheets remains the source of truth. This personal single-user login is not a multi-user account system.
 
 - [Firecrawl Search](https://docs.firecrawl.dev/api-reference/endpoint/search) and [Scrape](https://docs.firecrawl.dev/api-reference/endpoint/scrape)
 - [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html)
