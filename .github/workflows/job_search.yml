@@ -1,7 +1,16 @@
 name: Internship discovery four days weekly
+run-name: ${{ inputs.job_url && format('Link import {0}', inputs.request_id) || 'Internship discovery' }}
 on:
   workflow_dispatch:
     inputs:
+      job_url:
+        description: Individual posting to import (leave empty for discovery)
+        type: string
+        default: ''
+      request_id:
+        description: Import reference
+        type: string
+        default: ''
       free_sources_only:
         description: Check direct company feeds and saved postings without Firecrawl
         type: boolean
@@ -49,7 +58,13 @@ jobs:
       - name: Require output configuration
         run: python -c "import os; assert os.getenv('GOOGLE_SHEET_ID') and os.getenv('GOOGLE_CREDENTIALS_JSON'), 'Configure Google Sheet and service-account secrets before enabling this workflow'"
       - name: Discover, verify, match and sync
+        if: ${{ !inputs.job_url }}
         run: python main.py search
+      - name: Import one posting and sync
+        if: ${{ inputs.job_url != '' }}
+        env:
+          IMPORT_JOB_URL: ${{ inputs.job_url }}
+        run: python main.py import-url
       - name: Save history even after partial failures
         if: always()
         uses: actions/cache/save@v4

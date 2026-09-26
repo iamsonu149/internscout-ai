@@ -22,6 +22,7 @@ def main():
     run.add_argument("--max-scrapes", type=int)
     sub.add_parser("sync", help="Retry Google Sheets sync without discovery")
     sub.add_parser("doctor", help="Report configuration readiness without displaying secrets")
+    sub.add_parser("import-url", help="Import IMPORT_JOB_URL using the shared credit budget")
     serve = sub.add_parser("dashboard", help="Serve local dashboard on loopback")
     serve.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -45,6 +46,12 @@ def main():
                     indent=2,
                 )
             )
+        elif args.command == "import-url":
+            result = Pipeline(settings).import_url(os.environ.get("IMPORT_JOB_URL", ""))
+            print(json.dumps(result, indent=2))
+            if os.getenv("GITHUB_STEP_SUMMARY"):
+                with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+                    summary.write("## Link import\n\n" + result["outcome"] + "\n")
         elif args.command == "search":
             if args.max_queries is not None:
                 if not 0 <= args.max_queries <= 20:
@@ -90,6 +97,11 @@ def main():
             create_app(settings).run(host="127.0.0.1", port=args.port, debug=False)
         return 0
     except Exception as exc:
+        if args.command == "import-url" and os.getenv("GITHUB_STEP_SUMMARY"):
+            with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+                summary.write(
+                    "## Link import failed\n\nCould not complete the import and sheet sync. Check the credit budget, provider availability and worker configuration. A scrape may have been charged; do not repeatedly retry.\n"
+                )
         # Credential/provider exceptions can contain secrets. Deliberately omit their bodies.
         print(
             f"Operation failed ({type(exc).__name__}). Check configuration and structured logs.",

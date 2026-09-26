@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Import an internship · InternScout</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='import.css') }}"></head>
+<body class="import-page"><main class="import-panel">
+<a href="/" class="company-name">← Back to opportunities</a>
+<p class="eyebrow">FOUND SOMETHING PROMISING?</p><h1>Bring it to your shortlist.</h1>
+<p>Paste an internship link. We’ll extract the details, check your match and update your sheet.</p>
+{% if error %}<p class="rejection-reason" role="alert">{{ error }}</p>{% endif %}
+{% if reference %}<section class="context-bar" role="status"><div><strong>Import submitted</strong><p>Reference: {{ reference }}. It may wait for the current search to finish. Open import history and select “Link import {{ reference }}” to see the result.</p><a href="{{ runs_url }}" target="_blank" rel="noopener noreferrer">View import history ↗</a></div></section>{% endif %}
+<form method="post" class="import-form"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="submission" value="{{ nonce }}"><label for="job_url">Internship posting URL</label><input id="job_url" name="job_url" type="url" required maxlength="2048" placeholder="https://jobs.lever.co/company/posting" autocomplete="off"><button class="button primary" type="submit">Check and add to sheet →</button></form>
+<p class="rail-note">Supports individual Greenhouse, Lever, Ashby and Workable postings with structured job details. Strong matches go to Opportunities; relevant rejected matches include a reason in Rejected Matches. Unverifiable pages are excluded.</p>
+<p class="rail-note">One page per import, within your shared weekly credit budget. Existing saved postings are reused without another scrape. Refresh your dashboard after the import finishes.</p>
+</main></body></html>

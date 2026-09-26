@@ -71,3 +71,9 @@ Removed Relevant Projects, Source, Application URL and Notes from both live tabs
 
 Updated policy at user request: undisclosed pay is eligible with an explicit caveat; unpaid, zero or conditional-only pay remains excluded. Updated eligibility, sheet export, dashboard handling and weekly report wording. All 70 tests pass. Target 20, schedule, score threshold and credit limits are unchanged.
 
+
+## Link-import verification (2026-09-26)
+
+Added hosted session/CSRF/nonce tests, document and unsafe URL rejection, mocked one-scrape import with sheet sync, repeat URL deduplication without a second scrape, and unextractable-page no-write coverage. Paid production import remains pending the restricted GITHUB_IMPORT_TOKEN configuration; no Firecrawl credits were used for feature tests.
+
+Previous discovery improvements: full paid pilot run 36145383648 exposed provider throttling and an unavailable board; fixed by commit 6c32ea5. Direct-feeds-only workflow 36145806706 completed successfully. The weekly target remains aspirational, not a guarantee of 20 qualified postings.

@@ -347,3 +347,13 @@ An authenticated [account credit-balance check](https://docs.firecrawl.dev/api-r
 Each cloud run includes a weekly summary and a downloadable `weekly-report.json` artifact: unique strong matches, confirmed/undisclosed pay, target shortfall, rejection reasons, closure checks, conservative budget usage and provider-reported charges. Paid budget exhaustion does not prevent direct company feeds or Sheet synchronization. A failed source is reported as partial coverage.
 
 Instabase remains in an unavailable-board audit entry because its officially linked Greenhouse API returned 404. Firecrawl 401/402/403/429 responses stop further paid requests for that run. ATS application-page aliases are normalized to the job-detail URL, board indexes are excluded, and clearly foreign-only search snippets are screened before scraping.
+
+### Signed-in link imports
+
+The hosted dashboard includes **Import internship from a link**. Both GET and POST require a signed-in hosted session; POST additionally validates CSRF and a single-use submission nonce. Local loopback access cannot dispatch imports.
+
+Configure `GITHUB_IMPORT_TOKEN` in Vercel (Production), then redeploy. Use a fine-grained GitHub personal access token restricted to `iamsonu149/internscout-ai`, with repository **Actions: read and write**. Keep it out of source control and chat. The website uses it only to check workflow activity and dispatch the existing worker; Firecrawl and Google credentials stay in GitHub Actions.
+
+Imports accept individual supported ATS postings (Greenhouse, Lever, Ashby, Workable) or configured official domains. They reject documents and unsafe/unverified hosts before requesting Firecrawl. Exactly one scrape is attempted, with the same durable rolling credit ledger and concurrency group as discovery. No crawl, search, or PDF parsing is requested. Structured JobPosting content is required; unsupported pages fail without inventing fields. Existing saved URLs reuse evidence and retry sheet sync without another scrape. The usual verification, eligibility, compensation, matching and deduplication rules determine output tabs.
+
+The confirmation links to private GitHub import history. Select the run matching the displayed reference to read its result. Refresh the dashboard after completion. While a worker is active, new imports are refused to avoid replacing pending work. Concurrent requests can still race at dispatch; check run history if a submission is cancelled. Imports do not guarantee a row when extraction or screening fails.

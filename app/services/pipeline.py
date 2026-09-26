@@ -46,6 +46,39 @@ class Pipeline:
         with FileLock(self.settings.database_path + ".lock", timeout=0):
             return self._run(sync)
 
+    def import_url(self, value):
+        from collections import defaultdict
+
+        from app.services.link_import import validate_link
+
+        url = validate_link(value, self.settings.sources_path)
+        if not self.settings.sheet_id:
+            raise ValueError("Google Sheets is required for imports")
+        with FileLock(self.settings.database_path + ".lock", timeout=0):
+            metrics = defaultdict(int)
+            # Repeated submissions reuse saved evidence and retry sheet sync for free.
+            existing = next((j for j in self.repo.jobs() if normalize_url(j["source_url"]) == url), None)
+            if existing:
+                outcome = "Already saved; refreshed sheet without another scrape."
+            else:
+                page = self.firecrawl.scrape(url)
+                job = extract(page, url)
+                if job is None:
+                    return {"outcome": "Could not extract one unambiguous JobPosting. No row added."}
+                self.process(job, metrics)
+                if metrics["matched"]:
+                    outcome = "Matched and saved to Opportunities."
+                else:
+                    rejected = any(normalize_url(j["source_url"]) == url for j in self.repo.rejections())
+                    outcome = (
+                        "Saved to Rejected Matches with reasons."
+                        if rejected
+                        else "Excluded by quality checks; no row added."
+                    )
+            sheets = self.sheets or GoogleSheets(self.settings)
+            metrics.update(sheets.sync(self.repo.jobs(), self.repo))
+            return {"outcome": outcome, **metrics, **self.credit_budget.summary()}
+
     def _run(self, sync):
         run_id = self.repo.start_run()
         metrics = dict(

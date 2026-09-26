@@ -101,6 +101,41 @@ def create_app(settings, sheet_feed=None):
         session.clear()
         return redirect(url_for("login") if hosted else url_for("index"), code=303)
 
+    @app.route("/import", methods=["GET", "POST"])
+    def import_link():
+        from app.services.link_import import RUNS_URL, dispatch_import, validate_link
+
+        # Local loopback access alone is deliberately insufficient for this mutation.
+        if not hosted or not signed_in():
+            abort(403)
+        error = None
+        status = 200
+        if request.method == "POST":
+            if not secrets.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+                abort(400)
+            nonce = request.form.get("submission", "")
+            if not nonce or not secrets.compare_digest(nonce, session.get("import_nonce", "")):
+                abort(400)
+            try:
+                url = validate_link(request.form.get("job_url", ""), settings.sources_path)
+                reference = secrets.token_hex(8)
+                dispatch_import(url, reference)
+                session.pop("import_nonce", None)
+                session["import_reference"] = reference
+                return redirect(url_for("import_link", submitted="1"), code=303)
+            except (ValueError, RuntimeError) as exc:
+                error, status = str(exc), 400
+        session.setdefault("import_nonce", secrets.token_urlsafe(32))
+        reference = session.get("import_reference") if request.args.get("submitted") else None
+        return render_template(
+            "import.html",
+            csrf=session["csrf"],
+            nonce=session["import_nonce"],
+            error=error,
+            reference=reference,
+            runs_url=RUNS_URL,
+        ), status
+
     @app.get("/")
     def index():
         cloud = feed.read(force=request.args.get("refresh") == "1") if feed else None
