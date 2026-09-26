@@ -11,10 +11,28 @@ grant execute on function auth.uid() to authenticated;
 \i /tmp/workspaces.sql
 \i /tmp/discovery_queue.sql
 \i /tmp/schedule.sql
+\i /tmp/daily_schedule.sql
+do $$
+declare day_offset integer;
+begin
+ for day_offset in 0..6 loop
+  if public.discovery_schedule_due(timestamptz '2026-09-21 08:59:59+05:30' + day_offset*interval '1 day') then
+   raise exception 'Schedule ran before 09:00 IST';
+  end if;
+  if not public.discovery_schedule_due(timestamptz '2026-09-21 09:00:00+05:30' + day_offset*interval '1 day') then
+   raise exception 'Schedule excluded a weekday';
+  end if;
+ end loop;
+end $$;
 insert into auth.users values ('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 insert into public.profiles(user_id, document) values
 ('00000000-0000-0000-0000-000000000001','{"skills":["Alice"]}'),
 ('00000000-0000-0000-0000-000000000002','{"skills":["Bob"]}');
+do $$ begin
+ if (select count(*) from public.discovery_settings where schedule_enabled and weekly_limit=100) != 2 then
+  raise exception 'New profiles did not get daily defaults';
+ end if;
+end $$;
 insert into public.opportunities(user_id,fingerprint,payload) values
 ('00000000-0000-0000-0000-000000000001','same-job','{}'),
 ('00000000-0000-0000-0000-000000000002','same-job','{}');
@@ -118,3 +136,17 @@ do $$ declare n integer; begin
 end $$;
 reset role;
 select 'Queue access, duplicate submission and durable budget checks passed' as result;
+update public.discovery_settings set weekly_limit=0 where user_id='00000000-0000-0000-0000-000000000002';
+do $$ begin
+ if public.enqueue_due_discovery()!=0 then raise exception 'Scheduled a paused or zero-budget user'; end if;
+end $$;
+update public.discovery_settings set weekly_limit=100 where user_id='00000000-0000-0000-0000-000000000002';
+do $$ declare expected integer; begin
+ expected := case when public.discovery_schedule_due(now()) then 1 else 0 end;
+ if public.enqueue_due_discovery()!=expected then raise exception 'Daily eligible user was not scheduled'; end if;
+ if public.enqueue_due_discovery()!=0 then raise exception 'Daily scheduler duplicated a task'; end if;
+ if (select schedule_enabled from public.discovery_settings where user_id='00000000-0000-0000-0000-000000000001') then
+  raise exception 'Explicit schedule opt-out overwritten';
+ end if;
+end $$;
+select 'Daily schedule time boundary, defaults, opt-out and deduplication passed' as result;

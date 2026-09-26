@@ -59,6 +59,26 @@ def test_worker_disabled_prevents_queueing():
     assert client.post("/discovery", base_url=BASE, data={"csrf": csrf, "kind": "search"}).status_code == 503
 
 
+def test_settings_can_be_saved_before_worker_activation():
+    app, settings, store = setup()
+    saved = []
+    store.save_discovery_settings = lambda token, uid, limit, enabled: saved.append((uid, limit, enabled))
+    client = app.test_client()
+    csrf = authenticate(client, settings, "alice")
+    response = client.post(
+        "/discovery",
+        base_url=BASE,
+        data={
+            "csrf": csrf,
+            "action": "settings",
+            "weekly_limit": "100",
+            "scheduled": "yes",
+        },
+    )
+    assert response.status_code == 303
+    assert saved == [("alice", 100, True)]
+
+
 def test_budget_fail_closed():
     class Broken:
         def call(self, *args, **kwargs):

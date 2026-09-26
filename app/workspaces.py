@@ -395,10 +395,9 @@ def create_workspace_app(settings, store=None):
         error = None
         ready = settings.workspace_worker_enabled == "on"
         if request.method == "POST":
-            if not ready:
+            if not ready and request.form.get("action") != "settings":
                 abort(503)
             try:
-                matching_profile(store.profile(g.auth["access_token"], g.user["id"]))
                 if request.form.get("action") == "settings":
                     limit = int(request.form.get("weekly_limit", "100"))
                     if not 0 <= limit <= 10000:
@@ -407,6 +406,7 @@ def create_workspace_app(settings, store=None):
                         g.auth["access_token"], g.user["id"], limit, request.form.get("scheduled") == "yes"
                     )
                 else:
+                    matching_profile(store.profile(g.auth["access_token"], g.user["id"]))
                     kind = request.form.get("kind", "search")
                     if kind not in ("search", "import"):
                         abort(400)

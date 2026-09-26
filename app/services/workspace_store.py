@@ -141,7 +141,7 @@ class WorkspaceStore:
             token,
             params={"user_id": f"eq.{user_id}", "select": "weekly_limit,schedule_enabled"},
         )
-        return rows[0] if rows else {"weekly_limit": 100, "schedule_enabled": False}
+        return rows[0] if rows else {"weekly_limit": 100, "schedule_enabled": True}
 
     def save_discovery_settings(self, token, user_id, weekly_limit, enabled):
         self.call(
