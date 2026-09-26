@@ -91,3 +91,5 @@ and Supabase callback URLs and user steps. Next: user creates Google Web OAuth
 client and enters credentials directly into Supabase, configures allowed callback;
 then enable Google flag, redeploy/update alias, test with own and second account.
 Public registration is not yet live. Do not report Google as working until tested.
+
+Google provider enabled by user; public Auth settings confirms external.google=true and signups enabled. User confirmed Supabase URL Configuration saved. WORKSPACE_GOOGLE_ENABLED=on saved privately and deployed READY dpl_5z1fwQE8XrZeHTqHqnQtPGH4mkcX, stable alias internscout-ai-preview.vercel.app updated. CLI cookie-backed smoke: Google button visible, CSRF POST redirects to Supabase, PKCE callback uses stable preview, Supabase redirects to accounts.google.com with proper client ID suffix. End-to-end consent/code exchange still needs user's Google login. No Google secret copied to app or chat. Worker remains off, personal production unchanged. Google/navigation CI 36257359230 passed.
