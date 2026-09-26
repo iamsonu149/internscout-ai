@@ -13,6 +13,10 @@ from app.services.verifier import EXPORTABLE
 
 
 def create_app(settings, sheet_feed=None):
+    if settings.workspace_backend == "supabase":
+        from app.workspaces import create_workspace_app
+
+        return create_workspace_app(settings)
     hosted = settings.dashboard_mode == "hosted"
     if hosted and (
         not settings.sheet_id

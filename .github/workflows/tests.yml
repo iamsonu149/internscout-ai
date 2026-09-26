@@ -14,3 +14,23 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check .
       - run: python -m pytest -q
+  postgres-isolation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp supabase/migrations/202609260001_workspaces.sql /tmp/workspaces.sql
+      - run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/postgres_isolation.sql
+        env:
+          PGPASSWORD: local-ci-only

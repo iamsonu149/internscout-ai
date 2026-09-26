@@ -32,6 +32,10 @@ class Settings:
     dashboard_username: str = "internscout"
     dashboard_password: str = field(default="", repr=False)
     dashboard_secret_key: str = field(default="", repr=False)
+    workspace_backend: str = "personal"
+    supabase_url: str = ""
+    supabase_public_key: str = field(default="", repr=False)
+    workspace_cookie_key: str = field(default="", repr=False)
 
     @classmethod
     def from_env(cls):
@@ -73,6 +77,8 @@ class Settings:
             raise ValueError("Invalid budget, score, or recheck configuration")
         if obj.dashboard_mode not in {"local", "hosted"}:
             raise ValueError("Unknown dashboard mode")
+        if obj.workspace_backend not in {"personal", "supabase"}:
+            raise ValueError("Unknown workspace backend")
         if obj.dashboard_mode == "local":
             Path(obj.database_path).parent.mkdir(parents=True, exist_ok=True)
         return obj
