@@ -1,6 +1,6 @@
 # Multi-user foundation
 
-This opt-in mode uses Supabase PostgreSQL and email OTP accounts. It does not read
+This opt-in mode uses Supabase PostgreSQL and email/password accounts. It does not read
 the existing owner's Sheets, SQLite database or profile.json. Production remains
 in personal mode until the new project is configured and verified.
 
@@ -20,14 +20,18 @@ in personal mode until the new project is configured and verified.
 - Invite-only: create the initial accounts through Supabase Authentication > Users.
   Disable public new-user signups in Auth settings. The app's OTP call also sets
   `create_user=false`. Do not add public signups until abuse controls are tested.
-- Enable email authentication. In its Magic Link email template include
-  `<p>Your InternScout sign-in code: {{ .Token }}</p>`.
-- Configure custom SMTP before inviting external users. Supabase's default email
-  sender is intended for tests, sends only to organization team addresses and has
-  very low limits. Do not give users Supabase team access to bypass this restriction.
-- Configure OTP expiry and provider rate limits. App resend cooldown is only a UI
-  convenience, not a distributed abuse limiter. CAPTCHA/edge limits are required
-  before public signup.
+- Enable email authentication. Create initial users manually with unique passwords
+  and Auto Confirm enabled for accounts whose identity you have checked.
+- The pilot signs in with email and password via Supabase Auth. No email delivery
+  or custom domain is required for these already-confirmed accounts. Passwords
+  are sent to Supabase for verification, never saved in app sessions or logs.
+- Email-code login is not exposed in this pilot: the current Supabase dashboard
+  requires custom SMTP to edit the Magic Link template to include an OTP.
+- Configure custom SMTP before public email verification/password recovery or
+  invitations to external users. Default email is test-only and restricted.
+  Until then account recovery is handled by the administrator privately.
+- Keep public signups disabled. Provider rate limits apply; CAPTCHA/edge limits
+  are required before opening registration to everyone.
 - Tokens are held in encrypted HttpOnly/Secure cookies, separate from the signed
   CSRF session. The app verifies users with Auth, refreshes expired access tokens
   and sends the user's JWT to PostgREST. No service-role key is used in web routes.

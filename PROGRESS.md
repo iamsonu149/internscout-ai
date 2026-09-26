@@ -43,3 +43,31 @@ Auth/email setup, env configuration, migration of owner data and live verificati
 
 Resume by reading this file, git status and recent commits. No paid API calls are
 required for development. Update this checkpoint before ending a work session.
+
+Supabase project URL and publishable key received and saved outside repository in
+LOCALAPPDATA/InternScout/secrets/supabase-workspace.json, with distinct generated
+cookie/provider encryption keys. Auth settings endpoint returned HTTP 200;
+profiles REST endpoint returned 404 PGRST205 (migration not installed). Combined
+three-migration setup SQL prepared at LOCALAPPDATA/InternScout/supabase-setup.sql.
+Next user step: run that SQL in Supabase SQL Editor, then configure Auth and staging.
+No remote writes, paid calls or production changes in this connection check.
+
+2026-09-26 continuation: user ran combined SQL successfully; all seven REST
+endpoints now return 401/42501 for anonymous access (previously PGRST205).
+User created their own confirmed Supabase Auth user. Current Supabase UI blocks
+email template editing until custom SMTP is configured. User has no domain and
+authorized continuing: switched pilot login to email/password for confirmed
+accounts, avoiding email delivery. No password received or stored by agent.
+119 tests and Ruff passed. Prior queue CI 36231548150 passed both jobs.
+Preview deployed READY with per-deployment Supabase env and independent cookie,
+provider encryption and signing keys saved in private supabase-workspace.json.
+Preview: https://internscout-h8s4xl9ti-sonu-kumars-projects-69a7949b.vercel.app
+Vercel preview protection remains enabled. CLI authenticated smoke check:
+/login 200 with password form, / 303 to login, workspace.css 200.
+Browser visual QA of same login on loopback port 8012 passed.
+User asked via async prompt to privately test preview sign-in (Vercel login may
+be needed first). Awaiting outcome. Production personal app remains unchanged.
+Background worker is still off; no paid calls made. Need service credential
+stored privately for worker, hosting, actual two-user isolation, owner data
+migration and eventual cutover. Password reset email/public signup require
+additional setup; pilot is manually provisioned only. No SMTP needed for login.

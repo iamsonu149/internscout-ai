@@ -102,41 +102,36 @@ def create_workspace_app(settings, store=None):
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
-        error, message = None, None
+        error = None
+        status = 200
         if request.method == "POST":
             try:
-                if request.form.get("action") == "verify":
-                    email = session.get("pending_email", "")
-                    code = request.form.get("code", "").strip()
-                    if not email or not re.fullmatch(r"\d{6,10}", code):
-                        raise ValueError("Enter the code from your email.")
-                    auth = tokens(store.verify_code(email, code))
-                    store.user(auth["access_token"])
-                    session.clear()
-                    session["csrf"] = secrets.token_urlsafe(32)
-                    g.set_auth = auth
-                    return redirect(url_for("index"), code=303)
                 email = request.form.get("email", "").strip().lower()
-                if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
-                    raise ValueError("Enter a valid email address.")
-                if time.time() - session.get("code_sent_at", 0) < 60:
-                    raise ValueError("Please wait a minute before requesting another code.")
-                session["pending_email"] = email
-                session["code_sent_at"] = time.time()
-                try:
-                    store.send_code(email)
-                except WorkspaceError:
-                    pass  # Do not reveal whether an address belongs to an invited user.
-                message = "If this email has been invited, a sign-in code will arrive shortly."
-            except (WorkspaceError, ValueError):
-                error = "Could not sign in. Check your email/code, or wait a minute before trying again."
+                password = request.form.get("password", "")
+                if (
+                    len(email) > 254
+                    or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+                    or not 1 <= len(password) <= 1024
+                ):
+                    raise ValueError("Invalid credentials")
+                # Supabase handles password verification and provider rate limits.
+                # Never persist passwords in our database, session or logs.
+                auth = tokens(store.sign_in(email, password))
+                user = store.user(auth["access_token"])
+                if not user.get("id"):
+                    raise ValueError("Invalid user")
+                session.clear()
+                session["csrf"] = secrets.token_urlsafe(32)
+                g.set_auth = auth
+                return redirect(url_for("index"), code=303)
+            except (WorkspaceError, ValueError, KeyError):
+                error = "Could not sign in. Check your email and password, or try again later."
+                status = 401
         return render_template(
             "workspace/login.html",
             error=error,
-            message=message,
-            pending=bool(session.get("pending_email")),
             csrf=session["csrf"],
-        )
+        ), status
 
     @app.post("/logout")
     def logout():

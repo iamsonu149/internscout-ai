@@ -39,6 +39,13 @@ class WorkspaceStore:
     def send_code(self, email):
         return self.call("POST", "/auth/v1/otp", json={"email": email, "create_user": False})
 
+    def sign_in(self, email, password):
+        return self.call(
+            "POST",
+            "/auth/v1/token?grant_type=password",
+            json={"email": email, "password": password},
+        )
+
     def verify_code(self, email, code):
         return self.call("POST", "/auth/v1/verify", json={"email": email, "token": code, "type": "email"})
 

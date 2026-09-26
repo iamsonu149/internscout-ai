@@ -40,6 +40,11 @@ class Store:
         self.calls.append(("track", token, uid, job_id))
         return []
 
+    def sign_in(self, email, password):
+        if email != "alice@example.com" or password != "private-test-password":
+            raise WorkspaceError("invalid credentials")
+        return {"access_token": "alice", "refresh_token": "refresh-alice", "expires_in": 3600}
+
     def send_code(self, email):
         self.calls.append(("otp", email))
 
@@ -127,13 +132,16 @@ def test_csrf_and_cross_user_tracking():
     assert store.calls[-1][1:3] == ("alice", "alice")
 
 
-def test_otp_login_tokens_encrypted_and_refresh():
+def test_password_login_tokens_encrypted_and_refresh():
     app, settings, store = setup()
     client = app.test_client()
     soup = BeautifulSoup(client.get("/login", base_url=BASE).data, "html.parser")
     csrf = soup.select_one("input[name=csrf]")["value"]
-    client.post("/login", base_url=BASE, data={"csrf": csrf, "email": "alice@example.com"})
-    response = client.post("/login", base_url=BASE, data={"csrf": csrf, "action": "verify", "code": "123456"})
+    response = client.post(
+        "/login",
+        base_url=BASE,
+        data={"csrf": csrf, "email": "alice@example.com", "password": "private-test-password"},
+    )
     assert response.status_code == 303
     cookie = response.headers.getlist("Set-Cookie")[0]
     assert "refresh-alice" not in cookie and "HttpOnly" in cookie and "Secure" in cookie
@@ -232,3 +240,40 @@ def test_invalid_configuration_does_not_fallback_to_personal_data():
     _, settings, _ = setup()
     with pytest.raises(ValueError):
         create_workspace_app(replace(settings, supabase_url="https://evil.example"))
+
+
+def test_password_login_failure_and_csrf_do_not_create_session():
+    app, settings, store = setup()
+    client = app.test_client()
+    soup = BeautifulSoup(client.get("/login", base_url=BASE).data, "html.parser")
+    csrf = soup.select_one("input[name=csrf]")["value"]
+    form = {"email": "alice@example.com", "password": "never-reflect-this-password"}
+    assert client.post("/login", base_url=BASE, data=form).status_code == 400
+    response = client.post("/login", base_url=BASE, data={**form, "csrf": csrf})
+    assert response.status_code == 401
+    assert b"never-reflect-this-password" not in response.data
+    assert not client.get_cookie(COOKIE, domain="workspace.vercel.app")
+    with client.session_transaction(base_url=BASE) as session:
+        assert "password" not in session and "pending_email" not in session
+    assert client.get("/", base_url=BASE).status_code == 303
+
+
+def test_password_adapter_uses_supabase_auth_only():
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json={"access_token": "test-access"})
+
+    store = WorkspaceStore(
+        "https://example.supabase.co",
+        "sb_publishable_test",
+        client=httpx.Client(transport=httpx.MockTransport(respond)),
+    )
+    assert store.sign_in("alice@example.com", "private-password")["access_token"] == "test-access"
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.url.path == "/auth/v1/token"
+    assert request.url.params["grant_type"] == "password"
+    assert json.loads(request.content) == {"email": "alice@example.com", "password": "private-password"}
+    assert "private-password" not in str(request.url)
