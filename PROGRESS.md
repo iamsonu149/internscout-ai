@@ -71,3 +71,23 @@ Background worker is still off; no paid calls made. Need service credential
 stored privately for worker, hosting, actual two-user isolation, owner data
 migration and eventual cutover. Password reset email/public signup require
 additional setup; pilot is manually provisioned only. No SMTP needed for login.
+
+2026-09-26 Google/navigation continuation:
+User clarified they WERE signed in and My profile opened the complete-profile
+page. That is correct behavior: owner profile migration is still pending. Hosted
+logs confirm GET /profile 200 plus successful session refresh. No evidence of
+broken private route navigation. Explained this correction to user.
+Added authenticated /login and /signup redirects, safe return-to-page behavior,
+visible Create an account page, and Google OAuth code (PKCE, encrypted browser
+flow, random state, ten-minute expiry, one-time exchange, allowlisted next route).
+Google stays disabled until OAuth configured. Live auth settings confirmed
+external.google=false. No Google client credential or worker credential supplied.
+129 tests passed; relevant ten OAuth/navigation tests passed after final hardening.
+Stable preview alias now https://internscout-ai-preview.vercel.app points to
+READY deployment dpl_JCBTsZcRwyuXsJyVEfGowJXYUSRx. Google flag off; worker off.
+WORKSPACE_ORIGIN saved privately as stable preview URL. Existing personal
+production not changed. Guide docs/GOOGLE_LOGIN_SETUP.md contains exact Google
+and Supabase callback URLs and user steps. Next: user creates Google Web OAuth
+client and enters credentials directly into Supabase, configures allowed callback;
+then enable Google flag, redeploy/update alias, test with own and second account.
+Public registration is not yet live. Do not report Google as working until tested.

@@ -1,0 +1,16 @@
+{% extends 'workspace/base.html' %}
+{% block body %}
+<section class="login-grid"><div class="intro"><p class="eyebrow">YOUR NEXT CHAPTER</p>
+<h1>A workspace<br>of your own.</h1><p>Build your profile, connect your own Firecrawl account, and discover internships that fit.</p>
+<div class="pill">Private profile &middot; Your own credit budget</div></div>
+<div class="card"><p class="eyebrow">CREATE YOUR ACCOUNT</p><h2>Start with your strengths.</h2>
+{% if google_enabled %}
+<p>Use your Google account to create your workspace or sign in to an existing one.</p>
+<form method="post" action="/auth/google"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="/profile"><button>Continue with Google</button></form>
+<p class="muted">Next, review your profile and connect your Firecrawl key. Creating an account does not start a paid search.</p>
+{% else %}
+<p class="notice" role="status">Google signup is being configured. New registration is not open yet.</p>
+<p>You can sign in now if your account has already been created for the private preview.</p>
+{% endif %}
+<p>Already have an account? <a href="/login">Sign in</a></p></div></section>
+{% endblock %}

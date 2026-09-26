@@ -39,6 +39,8 @@ class Settings:
     provider_encryption_key: str = field(default="", repr=False)
     supabase_worker_key: str = field(default="", repr=False)
     workspace_worker_enabled: str = "off"
+    workspace_google_enabled: str = "off"
+    workspace_origin: str = ""
 
     @classmethod
     def from_env(cls):

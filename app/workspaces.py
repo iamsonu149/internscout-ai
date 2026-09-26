@@ -1,10 +1,12 @@
 """Opt-in, isolated multi-user application; never reads the owner's local/Sheet data."""
 
+import base64
+import hashlib
 import json
 import re
 import secrets
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 from flask import Flask, abort, g, redirect, render_template, request, session, url_for
@@ -31,6 +33,20 @@ def create_workspace_app(settings, store=None):
         or len(settings.dashboard_secret_key) < 32
     ):
         raise ValueError("Configure a Supabase project, public key and dashboard signing secret.")
+    google_enabled = settings.workspace_google_enabled == "on"
+    origin = settings.workspace_origin.rstrip("/")
+    if google_enabled:
+        site = urlsplit(origin)
+        if (
+            site.scheme != "https"
+            or not site.hostname
+            or site.path
+            or site.query
+            or site.fragment
+            or site.username
+            or site.port not in (None, 443)
+        ):
+            raise ValueError("Google login requires a fixed HTTPS WORKSPACE_ORIGIN.")
     cipher = Fernet(settings.workspace_cookie_key.encode())
     store = store or WorkspaceStore(settings.supabase_url, settings.supabase_public_key)
     app = Flask(__name__)
@@ -51,6 +67,19 @@ def create_workspace_app(settings, store=None):
             "expires_at": time.time() + int(payload.get("expires_in", 3600)),
         }
 
+    def destination(value):
+        return value if value in {"/", "/profile", "/connections", "/discovery"} else "/"
+
+    def finish_login(payload, next_path="/"):
+        auth = tokens(payload)
+        if not store.user(auth["access_token"]).get("id"):
+            raise ValueError("Invalid user")
+        session.clear()
+        session["csrf"] = secrets.token_urlsafe(32)
+        g.set_auth = auth
+        g.clear_auth = False
+        return redirect(destination(next_path), code=303)
+
     @app.before_request
     def authenticate():
         if request.routing_exception is not None:
@@ -61,9 +90,18 @@ def create_workspace_app(settings, store=None):
         ):
             abort(400)
         g.auth = None
-        if request.endpoint in {"login", "static", "profile_template", "resume_prompt"}:
+        if request.endpoint in {
+            "static",
+            "profile_template",
+            "resume_prompt",
+            "google_start",
+            "google_callback",
+        }:
             return None
+        public_auth_page = request.endpoint in {"login", "signup"}
         encrypted = request.cookies.get(COOKIE, "")
+        if public_auth_page and not encrypted:
+            return None
         try:
             g.auth = json.loads(cipher.decrypt(encrypted.encode(), ttl=30 * 86400))
             if g.auth["expires_at"] <= time.time() + 60:
@@ -73,8 +111,13 @@ def create_workspace_app(settings, store=None):
             if not g.user.get("id"):
                 raise SessionExpired()
         except (InvalidToken, ValueError, KeyError, SessionExpired):
+            g.auth = None
             g.clear_auth = True
-            return redirect(url_for("login"), code=303)
+            if public_auth_page:
+                return None
+            return redirect(url_for("login", next=destination(request.path)), code=303)
+        if public_auth_page:
+            return redirect(destination(request.args.get("next")), code=303)
 
     @app.after_request
     def secure(response):
@@ -84,7 +127,12 @@ def create_workspace_app(settings, store=None):
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "no-referrer",
                 "Strict-Transport-Security": "max-age=31536000",
-                "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+                + (
+                    f" {settings.supabase_url.rstrip('/')} https://accounts.google.com"
+                    if google_enabled
+                    else ""
+                ),
             }
         )
         if getattr(g, "set_auth", None):
@@ -116,14 +164,7 @@ def create_workspace_app(settings, store=None):
                     raise ValueError("Invalid credentials")
                 # Supabase handles password verification and provider rate limits.
                 # Never persist passwords in our database, session or logs.
-                auth = tokens(store.sign_in(email, password))
-                user = store.user(auth["access_token"])
-                if not user.get("id"):
-                    raise ValueError("Invalid user")
-                session.clear()
-                session["csrf"] = secrets.token_urlsafe(32)
-                g.set_auth = auth
-                return redirect(url_for("index"), code=303)
+                return finish_login(store.sign_in(email, password), request.form.get("next"))
             except (WorkspaceError, ValueError, KeyError):
                 error = "Could not sign in. Check your email and password, or try again later."
                 status = 401
@@ -131,7 +172,69 @@ def create_workspace_app(settings, store=None):
             "workspace/login.html",
             error=error,
             csrf=session["csrf"],
+            google_enabled=google_enabled,
+            next_path=destination(request.args.get("next")),
         ), status
+
+    @app.get("/signup")
+    def signup():
+        return render_template("workspace/signup.html", csrf=session["csrf"], google_enabled=google_enabled)
+
+    @app.post("/auth/google")
+    def google_start():
+        if not google_enabled:
+            return render_template("workspace/signup.html", csrf=session["csrf"], google_enabled=False), 503
+        if request.host_url.rstrip("/") != origin:
+            return redirect(origin + "/login", code=303)
+        verifier = secrets.token_urlsafe(48)
+        state = secrets.token_urlsafe(32)
+        session["oauth"] = cipher.encrypt(
+            json.dumps(
+                {
+                    "verifier": verifier,
+                    "state": state,
+                    "next": destination(request.form.get("next", "/profile")),
+                }
+            ).encode()
+        ).decode()
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        callback = origin + "/auth/callback?" + urlencode({"flow": state})
+        params = urlencode(
+            {
+                "provider": "google",
+                "redirect_to": callback,
+                "code_challenge": challenge,
+                "code_challenge_method": "s256",
+                "scopes": "openid email profile",
+            }
+        )
+        response = redirect(settings.supabase_url.rstrip("/") + "/auth/v1/authorize?" + params, code=303)
+        return response
+
+    @app.get("/auth/callback")
+    def google_callback():
+        encrypted = session.pop("oauth", "")
+        try:
+            if not google_enabled or request.args.get("error"):
+                raise ValueError("Google sign-in unavailable")
+            flow = json.loads(cipher.decrypt(encrypted.encode(), ttl=600))
+            supplied_state = request.args.get("flow", "")
+            if not re.fullmatch(r"[A-Za-z0-9_-]{43}", supplied_state) or not secrets.compare_digest(
+                flow["state"], supplied_state
+            ):
+                raise ValueError("Invalid sign-in flow")
+            code = request.args.get("code", "")
+            if not 1 <= len(code) <= 2048:
+                raise ValueError("Missing authorization code")
+            return finish_login(store.exchange_code(code, flow["verifier"]), flow["next"])
+        except (InvalidToken, WorkspaceError, ValueError, KeyError):
+            return render_template(
+                "workspace/login.html",
+                csrf=session["csrf"],
+                google_enabled=google_enabled,
+                next_path="/",
+                error="Google sign-in could not finish. Please start again from this page.",
+            ), 400
 
     @app.post("/logout")
     def logout():

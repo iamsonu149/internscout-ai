@@ -49,6 +49,13 @@ class WorkspaceStore:
     def verify_code(self, email, code):
         return self.call("POST", "/auth/v1/verify", json={"email": email, "token": code, "type": "email"})
 
+    def exchange_code(self, code, verifier):
+        return self.call(
+            "POST",
+            "/auth/v1/token?grant_type=pkce",
+            json={"auth_code": code, "code_verifier": verifier},
+        )
+
     def refresh(self, token):
         return self.call("POST", "/auth/v1/token?grant_type=refresh_token", json={"refresh_token": token})
 
