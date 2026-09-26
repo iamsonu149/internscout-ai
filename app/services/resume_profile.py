@@ -109,8 +109,11 @@ def parse_profile(raw):
             result[key] = value
         return result
 
+    def reject_constant(_value):
+        raise ValueError("NaN and Infinity are not valid profile values.")
+
     try:
-        document = json.loads(raw, object_pairs_hook=unique, parse_constant=lambda _: None)
+        document = json.loads(raw, object_pairs_hook=unique, parse_constant=reject_constant)
         errors = list(Draft202012Validator(SCHEMA).iter_errors(document))
     except (json.JSONDecodeError, RecursionError):
         raise ValueError("Paste a valid JSON profile, not the resume or instructions.") from None

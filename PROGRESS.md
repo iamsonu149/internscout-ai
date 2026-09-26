@@ -13,7 +13,9 @@ profile JSON validation/review, private dashboard and tracking. Use authenticate
 user JWTs for database requests; no service-role key in web routes. Disable legacy
 shared imports/search in multi-user mode until per-user queue/budget exists.
 
-Tests: 110 application tests pass. PostgreSQL 17 isolated Docker test passed:
+Tests: full 110-test suite passed, then the expanded 15-test workspace suite passed
+(one extra HTML-escaping/nonfinite-JSON test). CI run 36220047496 passed both Python
+and PostgreSQL jobs for foundation commit 63bc565. PostgreSQL 17 isolated Docker test passed:
 owner-only reads/writes, rejected cross-user tracking, immutable evidence columns,
 anonymous denial, forbidden owner reassignment. CI now repeats PostgreSQL checks.
 Setup guide: docs/MULTI_USER_SETUP.md. User is creating first Supabase project;

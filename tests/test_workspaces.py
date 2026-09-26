@@ -182,6 +182,23 @@ def test_duplicate_json_fields_and_oversize_rejected():
             parse_profile(raw)
 
 
+def test_nonfinite_values_rejected_and_html_escaped():
+    with pytest.raises(ValueError):
+        parse_profile('{"schema_version":1,"skills":[],"current_city":NaN}')
+    app, settings, _ = setup()
+    client = app.test_client()
+    csrf = authenticate(client, settings, "alice")
+    response = client.post(
+        "/profile",
+        base_url=BASE,
+        data={
+            "csrf": csrf,
+            "document": json.dumps({"schema_version": 1, "skills": ["<script>alert(1)</script>"]}),
+        },
+    )
+    assert response.status_code == 200 and b"<script>alert(1)</script>" not in response.data
+
+
 def test_postgrest_always_uses_user_token_and_owner_filter():
     requests = []
 
