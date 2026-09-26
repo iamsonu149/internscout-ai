@@ -214,8 +214,22 @@ def create_workspace_app(settings, store=None):
     @app.get("/auth/callback")
     def google_callback():
         encrypted = session.pop("oauth", "")
+        error_message = "Google sign-in could not finish. Please start again from this page."
         try:
             if not google_enabled or request.args.get("error"):
+                if (
+                    google_enabled
+                    and request.args.get("error") == "server_error"
+                    and request.args.get("error_code") == "unexpected_failure"
+                    and request.args.get("error_description", "").startswith(
+                        "Unable to exchange external code"
+                    )
+                ):
+                    error_message = (
+                        "Google sign-in is temporarily unavailable because the Google connection could not be verified. "
+                        "The administrator needs to check the Google client ID and secret in Supabase. "
+                        "You can still use your InternScout email and password below."
+                    )
                 raise ValueError("Google sign-in unavailable")
             flow = json.loads(cipher.decrypt(encrypted.encode(), ttl=600))
             supplied_state = request.args.get("flow", "")
@@ -233,7 +247,7 @@ def create_workspace_app(settings, store=None):
                 csrf=session["csrf"],
                 google_enabled=google_enabled,
                 next_path="/",
-                error="Google sign-in could not finish. Please start again from this page.",
+                error=error_message,
             ), 400
 
     @app.post("/logout")

@@ -166,3 +166,17 @@ def test_pkce_adapter_never_uses_service_credentials():
     assert seen[0].url.params["grant_type"] == "pkce"
     assert json.loads(seen[0].content) == {"auth_code": "auth-code", "code_verifier": "private-verifier"}
     assert seen[0].headers["apikey"] == "sb_publishable_test"
+
+
+def test_external_exchange_error_is_actionable_without_reflecting_code():
+    app, settings, store = google_setup()
+    client = app.test_client()
+    response = client.get(
+        "/auth/callback?error=server_error&error_code=unexpected_failure"
+        "&error_description=Unable+to+exchange+external+code:+private-google-code",
+        base_url=BASE,
+    )
+    assert response.status_code == 400
+    assert b"administrator needs to check" in response.data
+    assert b"private-google-code" not in response.data
+    assert not store.exchanges
