@@ -21,6 +21,21 @@ anonymous denial, forbidden owner reassignment. CI now repeats PostgreSQL checks
 Setup guide: docs/MULTI_USER_SETUP.md. User is creating first Supabase project;
 project instructions already given. No remote database or email configured yet.
 
+Continuation implemented user-owned encrypted Firecrawl connection, queue,
+worker-once and polling worker, PostgreSQL budget reservations and four-day
+schedule. Apply ALL THREE migrations in filename order. Web worker flag defaults
+off; do not enable until separate worker is deployed and verified. New configuration:
+PROVIDER_ENCRYPTION_KEY (web+worker), SUPABASE_WORKER_KEY (worker only),
+WORKSPACE_WORKER_ENABLED=on (after verification). Tests include vault owner binding,
+worker using only claimed user's key, personal profile conversion and connection
+key never reflected. PostgreSQL checks include queue/service permissions and
+budget cap. A manual 8-way concurrency test accepted exactly 1 available reservation.
+Current full suite: 117 tests passed after final fixes. All three migrations and
+expanded PostgreSQL security/budget SQL tests passed. Fixed encrypted-key upsert
+permissions using an owner-derived RPC (no ciphertext read grant). Temporary
+PostgreSQL test container was stopped/removed. Pilot supports India-authorized
+users, technical roles and eligible worldwide remote. No paid API calls used.
+
 Next: obtain project URL/public key through safe configuration, apply migration,
 configure Auth email OTP template and test accounts (custom SMTP for outside users),
 verify actual Supabase two-user isolation and staging UI. Production activation requires database project, migration,

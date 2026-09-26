@@ -32,7 +32,7 @@ class Store:
         assert token == uid
         self.profiles[uid] = document
 
-    def opportunities(self, token, uid, offset):
+    def opportunities(self, token, uid, offset, screened=False):
         assert token == uid
         return []
 

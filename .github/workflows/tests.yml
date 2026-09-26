@@ -31,6 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cp supabase/migrations/202609260001_workspaces.sql /tmp/workspaces.sql
+      - run: cp supabase/migrations/202609260002_discovery_queue.sql /tmp/discovery_queue.sql
+      - run: cp supabase/migrations/202609260003_schedule.sql /tmp/schedule.sql
       - run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/postgres_isolation.sql
         env:
           PGPASSWORD: local-ci-only

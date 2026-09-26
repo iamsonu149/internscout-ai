@@ -93,6 +93,10 @@ def match_job(job, profile, eligibility):
         if any(mentions(job.title + " " + text, k) for k in p["keywords"])
     ]
     primary = bool(re.search(r"software|backend|back.end|python|\bsde\b", job.title, re.I))
+    if profile.get("personalized"):
+        from app.services.workspace_profile import preferred_role
+
+        primary = preferred_role(job.title, profile["primary_roles"])
     education = bool(
         re.search(
             r"bachelor|undergraduate|\bBS\b|\bBSc\b|data science|computer science|related (?:field|discipline)",

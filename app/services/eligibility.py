@@ -28,6 +28,19 @@ def evaluate(job, profile, today=None):
         reasons.append(PAY_REASON)
     elif not paid_evidence(job.salary_or_stipend, job.description):
         concerns.append(PAY_UNCONFIRMED)
+        if profile.get("personalized") and not profile.get("accept_undisclosed_compensation"):
+            reasons.append("Compensation is undisclosed and your profile does not accept unconfirmed pay")
+    if profile.get("personalized"):
+        from app.services.workspace_profile import preferred_role
+
+        if not preferred_role(job.title, profile["primary_roles"]):
+            reasons.append("Outside your confirmed desired roles")
+        if profile.get("remote_only") and job.remote is not True:
+            reasons.append("Remote work is not established for your remote-only preference")
+        locations = profile.get("preferred_locations", [])
+        if locations and not any(location.lower() in (job.location or "").lower() for location in locations):
+            if not (job.remote is True and re.search(r"worldwide|anywhere|global", job.location or "", re.I)):
+                reasons.append("Location does not match your confirmed preferences")
     if not re.search(r"\bintern(?:ship)?\b", title + " " + (job.employment_type or ""), re.I):
         reasons.append("Not explicitly an internship")
     if not re.search(
@@ -101,11 +114,19 @@ def evaluate(job, profile, today=None):
         if not re.search(
             r"B\.?Tech|Bachelor of (?:Technology|Engineering)", profile.get("education", ""), re.I
         ):
-            reasons.append("Restricted to BTech/BE; profile lists a BS degree")
+            reasons.append(
+                "Restricted to BTech/BE; profile lists a BS degree"
+                if not profile.get("personalized")
+                else "Required BTech/BE degree is not established by your profile"
+            )
     elif re.search(r"computer science|computer engineering", text, re.I) and not re.search(
         r"data science|related (?:field|discipline)|equivalent", text, re.I
     ):
-        concerns.append("Degree wording names CS/Computer Engineering; confirm BS Data Science eligibility")
+        concerns.append(
+            "Degree wording names CS/Computer Engineering; confirm BS Data Science eligibility"
+            if not profile.get("personalized")
+            else "Confirm your degree meets the stated CS/Computer Engineering requirement"
+        )
     availability = profile.get("availability", {})
     if (
         re.search(r"full[ -]time", text + " " + (job.employment_type or ""), re.I)

@@ -36,6 +36,9 @@ class Settings:
     supabase_url: str = ""
     supabase_public_key: str = field(default="", repr=False)
     workspace_cookie_key: str = field(default="", repr=False)
+    provider_encryption_key: str = field(default="", repr=False)
+    supabase_worker_key: str = field(default="", repr=False)
+    workspace_worker_enabled: str = "off"
 
     @classmethod
     def from_env(cls):

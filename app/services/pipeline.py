@@ -29,12 +29,21 @@ def event(name, **details):
 
 
 class Pipeline:
-    def __init__(self, settings, firecrawl=None, ats=None, sheets=None, analyzer=None):
+    def __init__(
+        self,
+        settings,
+        firecrawl=None,
+        ats=None,
+        sheets=None,
+        analyzer=None,
+        repository=None,
+        credit_budget=None,
+    ):
         self.settings = settings
-        self.repo = Repository(settings.database_path)
+        self.repo = repository or Repository(settings.database_path)
         self.profile = json.loads(Path(settings.profile_path).read_text(encoding="utf-8"))
         self.sources = json.loads(Path(settings.sources_path).read_text(encoding="utf-8"))
-        self.credit_budget = CreditBudget(self.repo, settings.weekly_credit_limit)
+        self.credit_budget = credit_budget or CreditBudget(self.repo, settings.weekly_credit_limit)
         self.firecrawl = firecrawl or Firecrawl(settings.firecrawl_api_key, budget=self.credit_budget)
         self.ats = ats or PublicATS()
         self.sheets = sheets
@@ -46,20 +55,20 @@ class Pipeline:
         with FileLock(self.settings.database_path + ".lock", timeout=0):
             return self._run(sync)
 
-    def import_url(self, value):
+    def import_url(self, value, sync=True):
         from collections import defaultdict
 
         from app.services.link_import import validate_link
 
         url = validate_link(value, self.settings.sources_path)
-        if not self.settings.sheet_id:
+        if sync and not self.settings.sheet_id:
             raise ValueError("Google Sheets is required for imports")
         with FileLock(self.settings.database_path + ".lock", timeout=0):
             metrics = defaultdict(int)
             # Repeated submissions reuse saved evidence and retry sheet sync for free.
             existing = next((j for j in self.repo.jobs() if normalize_url(j["source_url"]) == url), None)
             if existing:
-                outcome = "Already saved; refreshed sheet without another scrape."
+                outcome = "Already saved; reused existing evidence without another scrape."
             else:
                 page = self.firecrawl.scrape(url)
                 job = extract(page, url)
@@ -75,8 +84,9 @@ class Pipeline:
                         if rejected
                         else "Excluded by quality checks; no row added."
                     )
-            sheets = self.sheets or GoogleSheets(self.settings)
-            metrics.update(sheets.sync(self.repo.jobs(), self.repo))
+            if sync:
+                sheets = self.sheets or GoogleSheets(self.settings)
+                metrics.update(sheets.sync(self.repo.jobs(), self.repo))
             return {"outcome": outcome, **metrics, **self.credit_budget.summary()}
 
     def _run(self, sync):

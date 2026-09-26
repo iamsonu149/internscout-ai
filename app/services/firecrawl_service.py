@@ -18,11 +18,13 @@ def queries_for(profile, day_index=0):
     # Many valid postings omit a graduation year and use city names instead of India.
     queries += [
         f'"{role}" internship {city}'
-        for role in ("software", "backend", "python")
+        for role in (
+            profile["primary_roles"][:3] if profile.get("personalized") else ("software", "backend", "python")
+        )
         for city in ("Bengaluru", "Hyderabad", "Pune")
     ]
     queries += [
-        f"site:{domain} internship software {profile['country']}"
+        f"site:{domain} internship {profile['primary_roles'][0] if profile.get('personalized') else 'software'} {profile['country']}"
         for domain in ("boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com")
     ]
     queries = list(dict.fromkeys(queries))

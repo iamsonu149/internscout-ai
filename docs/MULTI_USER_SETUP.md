@@ -7,7 +7,8 @@ in personal mode until the new project is configured and verified.
 ## Project and database
 
 1. Create a Supabase Free project. Save its database password privately.
-2. Open SQL Editor and run `supabase/migrations/202609260001_workspaces.sql` once.
+2. Open SQL Editor and run all three SQL files under `supabase/migrations/` once,
+   in filename order (workspaces, discovery_queue, schedule).
 3. Profiles are owned by `auth.users.id`. Opportunities have a per-user fingerprint
    constraint. RLS restricts reads and updates to the authenticated owner. Users
    may edit status/notes but cannot insert or change verified match evidence.
@@ -44,6 +45,8 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_PUBLIC_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
 DASHBOARD_SECRET_KEY=YOUR_EXISTING_STRONG_SIGNING_SECRET
 WORKSPACE_COOKIE_KEY=GENERATED_FERNET_KEY
+PROVIDER_ENCRYPTION_KEY=SEPARATE_GENERATED_FERNET_KEY
+WORKSPACE_WORKER_ENABLED=off
 ```
 
 Generate the encryption key with `cryptography.fernet.Fernet.generate_key()` and
@@ -62,12 +65,46 @@ Implemented: account sign-in, private profile read/write, JSON import validation
 explicit review/confirmation, manual entry, paginated personal opportunity list,
 status and notes updates. No paid Gemini or Firecrawl calls in these flows.
 
-Not yet enabled in multi-user mode: API-key connections, per-user search/import
-workers, schedules, credit ledger and owner data migration. The existing shared
-GitHub dispatcher is deliberately not registered in multi-user mode. Build a
-PostgreSQL-backed job queue and encrypted provider-key storage before enabling
-discovery, with per-user reservations and locks. Never use the owner's keys for
-new users by default.
+Also implemented: encrypted user-owned Firecrawl connections, connection balance
+check, per-user discovery queue, import/search tasks, PostgreSQL credit reservations,
+and opt-in Monday/Wednesday/Friday/Sunday schedules after 09:00 Asia/Kolkata.
+The existing shared GitHub dispatcher is not registered in multi-user mode.
+No owner's API keys or personal profile are inherited by new users.
+
+## Background worker
+
+Run a separate background process with the repository and Python dependencies.
+Its environment needs SUPABASE_URL, SUPABASE_WORKER_KEY (service-role JWT or secret
+key), PROVIDER_ENCRYPTION_KEY (same value as web app), and WORKSPACE_WORKER_ENABLED=on.
+Never place SUPABASE_WORKER_KEY into browser code or the web app's public-key field.
+
+Use `python -m scripts.run_workspace_worker` from the repository root. This checks
+the durable queue every minute while idle; stop with Ctrl+C. A process host must
+keep it running for schedules to work. `python main.py worker-once` handles one
+task for diagnostics. No worker has been provisioned or started in production yet.
+Only after testing the worker should the web deployment also set
+WORKSPACE_WORKER_ENABLED=on. Until then its submit/settings forms are disabled.
+
+The worker reserves credits atomically before Firecrawl requests; budget failures
+prevent paid calls. Ambiguous failures retain reservations. Credentials are bound
+to owner/provider inside encrypted payloads. Only the worker can read ciphertext;
+web writes use an RPC which derives ownership from auth.uid(). One active task per
+user and a 15-minute submission cooldown are enforced by PostgreSQL. Claims expire
+after 30 minutes; timed-out tasks fail rather than automatically repeating paid
+work. Provider disconnect prevents future key loads, not an already-running task.
+Each search is capped at 3 queries, 8 scrapes, 4 free closure checks and zero LLM
+calls. This is an application reservation cap, not an account-wide billing cap.
+
+Pilot constraints: users must confirm India work authorization, a single target
+graduation year, skills and desired roles. Worldwide remote eligibility is also
+checked. Do not infer authorization from residence. Confirm acceptance of
+undisclosed compensation explicitly; unpaid roles remain excluded. Exact minimum
+stipend filtering is not implemented, so profiles requesting it cannot start a
+search. International country-specific eligibility is future work. Weekly targets
+are reported but never guaranteed.
+
+Still pending: remote Supabase/Auth/SMTP setup and smoke tests, worker hosting,
+live two-account verification, owner-only migration and production cutover.
 
 Keep the old data until owner-only migration is validated: map existing Sheet
 records to the owner's authenticated UUID, retain status and notes, deduplicate

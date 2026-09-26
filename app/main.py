@@ -23,6 +23,7 @@ def main():
     sub.add_parser("sync", help="Retry Google Sheets sync without discovery")
     sub.add_parser("doctor", help="Report configuration readiness without displaying secrets")
     sub.add_parser("import-url", help="Import IMPORT_JOB_URL using the shared credit budget")
+    sub.add_parser("worker-once", help="Process one claimed private-workspace discovery task")
     serve = sub.add_parser("dashboard", help="Serve local dashboard on loopback")
     serve.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -46,6 +47,12 @@ def main():
                     indent=2,
                 )
             )
+        elif args.command == "worker-once":
+            from app.workspace_worker import work_once
+
+            result = work_once(settings)
+            print(json.dumps(result))
+            return 1 if result["state"] == "FAILED" else 0
         elif args.command == "import-url":
             result = Pipeline(settings).import_url(os.environ.get("IMPORT_JOB_URL", ""))
             print(json.dumps(result, indent=2))
