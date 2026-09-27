@@ -12,6 +12,7 @@ grant execute on function auth.uid() to authenticated;
 \i /tmp/discovery_queue.sql
 \i /tmp/schedule.sql
 \i /tmp/daily_schedule.sql
+\i /tmp/credit_default.sql
 do $$
 declare day_offset integer;
 begin
@@ -29,7 +30,7 @@ insert into public.profiles(user_id, document) values
 ('00000000-0000-0000-0000-000000000001','{"skills":["Alice"]}'),
 ('00000000-0000-0000-0000-000000000002','{"skills":["Bob"]}');
 do $$ begin
- if (select count(*) from public.discovery_settings where schedule_enabled and weekly_limit=100) != 2 then
+ if (select count(*) from public.discovery_settings where schedule_enabled and weekly_limit=250) != 2 then
   raise exception 'New profiles did not get daily defaults';
  end if;
 end $$;

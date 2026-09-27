@@ -95,3 +95,59 @@ def test_paid_timeout_is_not_retried():
     with pytest.raises(ProviderError):
         service(handler).search("internship")
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "endpoint,payload",
+    [
+        ("crawl", {"url": "https://example.com"}),
+        ("agent", {"prompt": "Read every page"}),
+        ("parse", {"url": "https://example.com/document.pdf"}),
+        (
+            "search",
+            {"query": "intern", "limit": 10, "sources": ["web"], "scrapeOptions": {"parsers": ["pdf"]}},
+        ),
+        (
+            "scrape",
+            {
+                "url": "https://example.com/job",
+                "formats": ["markdown", "rawHtml"],
+                "onlyMainContent": False,
+                "maxAge": 0,
+                "parsers": ["pdf"],
+                "proxy": "basic",
+            },
+        ),
+    ],
+)
+def test_expensive_request_shapes_blocked_before_network(endpoint, payload):
+    def no_network(request):
+        pytest.fail("Unsafe paid request must never reach provider")
+
+    with pytest.raises(ProviderError, match="safety policy"):
+        service(no_network)._call(endpoint, payload)
+
+
+def test_unexpected_charge_stops_further_paid_requests():
+    from app.services.credit_budget import BudgetExceeded
+
+    calls = []
+
+    class Budget:
+        def reserve(self, endpoint, cost):
+            return 1
+
+        def finish(self, reservation, reported, request_id):
+            assert reported == 5
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(200, json={"success": True, "creditsUsed": 5, "data": {"web": []}})
+
+    api = service(handler)
+    api.budget = Budget()
+    api.account_available = 250
+    api.search("internship")
+    with pytest.raises(BudgetExceeded):
+        api.search("another internship")
+    assert len(calls) == 1

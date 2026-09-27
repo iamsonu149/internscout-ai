@@ -399,7 +399,7 @@ def create_workspace_app(settings, store=None):
                 abort(503)
             try:
                 if request.form.get("action") == "settings":
-                    limit = int(request.form.get("weekly_limit", "100"))
+                    limit = int(request.form.get("weekly_limit", "250"))
                     if not 0 <= limit <= 10000:
                         raise ValueError("Weekly credit limit must be between 0 and 10,000.")
                     store.save_discovery_settings(

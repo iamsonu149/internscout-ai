@@ -8,7 +8,7 @@ in personal mode until the new project is configured and verified.
 
 1. Create a Supabase Free project. Save its database password privately.
 2. Open SQL Editor and run all SQL files under `supabase/migrations/` once,
-   in filename order (workspaces, discovery_queue, schedule, daily_schedule).
+   in filename order (workspaces, discovery_queue, schedule, daily_schedule, credit_default).
 3. Profiles are owned by `auth.users.id`. Opportunities have a per-user fingerprint
    constraint. RLS restricts reads and updates to the authenticated owner. Users
    may edit status/notes but cannot insert or change verified match evidence.
@@ -72,7 +72,7 @@ status and notes updates. No paid Gemini or Firecrawl calls in these flows.
 Also implemented: encrypted user-owned Firecrawl connections, connection balance
 check, per-user discovery queue, import/search tasks, PostgreSQL credit reservations,
 and daily schedules starting at 09:00 Asia/Kolkata. New profiles default to daily
-searches; existing opt-outs and weekly budgets are preserved. Users may disable
+searches; existing opt-outs and weekly budgets are preserved. New weekly budgets default to 250 credits. Users may disable
 the schedule, and budget/schedule settings can be saved before worker activation.
 The existing shared GitHub dispatcher is not registered in multi-user mode.
 No owner's API keys or personal profile are inherited by new users.

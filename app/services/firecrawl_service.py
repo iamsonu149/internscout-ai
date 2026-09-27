@@ -54,8 +54,30 @@ class Firecrawl:
         return value
 
     def _call(self, endpoint, payload):
+        # Keep paid request shapes closed: no crawl/agent/parse endpoints or
+        # search-time scraping can be introduced by page text or caller options.
+        if endpoint == "search":
+            safe = (
+                set(payload) == {"query", "limit", "sources"}
+                and type(payload.get("limit")) is int
+                and 1 <= payload["limit"] <= 20
+                and payload.get("sources") == ["web"]
+            )
+        elif endpoint == "scrape":
+            safe = (
+                set(payload) == {"url", "formats", "onlyMainContent", "maxAge", "parsers", "proxy"}
+                and payload.get("parsers") == []
+                and payload.get("proxy") == "basic"
+                and payload.get("formats") == ["markdown", "rawHtml"]
+                and isinstance(payload.get("url"), str)
+                and not document_url(payload["url"])
+            )
+        else:
+            safe = False
+        if not safe:
+            raise ProviderError("Paid request blocked by the document and credit safety policy")
         if self.stopped:
-            raise BudgetExceeded("Paid requests stopped after provider quota/auth/rate-limit response")
+            raise BudgetExceeded("Paid requests stopped after a provider limit or unexpected credit charge")
         if not self.key:
             raise ProviderError("FIRECRAWL_API_KEY is not configured")
         cost = 2 * math.ceil(payload["limit"] / 10) if endpoint == "search" else 1
@@ -88,6 +110,7 @@ class Firecrawl:
             self.budget.finish(reservation, reported, result.get("id") or metadata.get("scrapeId"))
             if type(reported) is int and reported > cost:
                 self.account_available -= reported - cost
+                self.stopped = True
         return result.get("data")
 
     def search(self, query, limit=5):
