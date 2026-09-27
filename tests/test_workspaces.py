@@ -277,3 +277,44 @@ def test_password_adapter_uses_supabase_auth_only():
     assert request.url.params["grant_type"] == "password"
     assert json.loads(request.content) == {"email": "alice@example.com", "password": "private-password"}
     assert "private-password" not in str(request.url)
+
+
+def test_ai_import_populates_editable_form_and_requires_verification():
+    app, settings, store = setup()
+    client = app.test_client()
+    csrf = authenticate(client, settings, "alice")
+    empty = BeautifulSoup(client.get("/profile", base_url=BASE).data, "html.parser")
+    assert empty.select_one("textarea[name=document]").text == ""
+    document = {
+        **EMPTY_PROFILE, "skills": ["Python"],
+        "education": [{"institution": "IIT Madras", "degree": "BS", "graduation_year": 2027}],
+        "projects": [{"name": "Search app", "summary": "A project", "technologies": ["Flask"]}],
+        "experience": [{"organization": "Example", "role": "Developer", "currently_working": False}],
+    }
+    response = client.post("/profile", base_url=BASE, data={
+        "csrf": csrf, "action": "review", "document": "```json\n" + json.dumps(document) + "\n```"
+    })
+    soup = BeautifulSoup(response.data, "html.parser")
+    assert soup.select_one('input[name="education.0.institution"]')["value"] == "IIT Madras"
+    form = soup.select_one('input[value="form_save"]').find_parent("form")
+    values = {}
+    for field in form.select("input[name], textarea[name], select[name]"):
+        if field.get("type") == "checkbox":
+            continue
+        if field.name == "select":
+            option = field.select_one("option[selected]") or field.select_one("option")
+            value = option.get("value", "")
+        else:
+            value = field.text if field.name == "textarea" else field.get("value", "")
+        values[field["name"]] = value
+    values["skills"] = "Python, SQL"
+    assert client.post("/profile", base_url=BASE, data=values).status_code == 200
+    assert not store.profiles
+    values["confirmed"] = "yes"
+    assert client.post("/profile", base_url=BASE, data=values).status_code == 303
+    saved = store.profiles["alice"]
+    assert saved["skills"] == ["Python", "SQL"]
+    assert saved["projects"][0]["technologies"] == ["Flask"]
+    assert saved["experience"][0]["currently_working"] is False
+    assert len(saved["education"]) == 1
+    assert saved["education"][0]["graduation_year"] == 2027

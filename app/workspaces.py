@@ -12,7 +12,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from flask import Flask, abort, g, redirect, render_template, request, session, url_for
 
 from app.database.repository import STATUSES
-from app.services.resume_profile import EMPTY_PROFILE, parse_profile
+from app.services.profile_form import profile_from_form
+from app.services.resume_profile import EMPTY_PROFILE, SCHEMA, parse_profile
 from app.services.workspace_store import SessionExpired, WorkspaceError, WorkspaceStore
 
 COOKIE = "__Host-internscout-workspace"
@@ -292,6 +293,9 @@ def create_workspace_app(settings, store=None):
         if request.method == "POST":
             raw = request.form.get("document", "")
             try:
+                if request.form.get("action") == "form_save":
+                    document = profile_from_form(request.form)
+                    raw = json.dumps(document)
                 if request.form.get("action") == "manual":
                     document = store.profile(g.auth["access_token"], g.user["id"]) or dict(EMPTY_PROFILE)
 
@@ -324,22 +328,23 @@ def create_workspace_app(settings, store=None):
                     document["preferences_to_confirm"] = preferences
                     raw = json.dumps(document)
                 document = parse_profile(raw)
-                if request.form.get("action") == "save" and request.form.get("confirmed") == "yes":
+                if request.form.get("action") in {"save", "form_save"} and request.form.get("confirmed") == "yes":
                     store.save_profile(g.auth["access_token"], g.user["id"], document)
                     return redirect(url_for("index"), code=303)
                 preview = True
                 raw = json.dumps(document, indent=2, ensure_ascii=False)
             except ValueError as exc:
                 error, status = str(exc), 400
-                document = {}
+                document = locals().get("document", {})
         else:
             document = store.profile(g.auth["access_token"], g.user["id"]) or EMPTY_PROFILE
-            raw = json.dumps(document, indent=2, ensure_ascii=False)
+            raw = ""
         return render_template(
             "workspace/profile.html",
             raw=raw,
             document=document,
             preview=preview,
+            schema=SCHEMA,
             error=error,
             csrf=session["csrf"],
         ), status

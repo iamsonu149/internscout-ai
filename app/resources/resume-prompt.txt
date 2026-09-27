@@ -5,8 +5,9 @@ unknown values and [] for unknown lists. Distinguish expected from completed
 graduation. Do not infer citizenship, work authorization, availability or relocation.
 Exclude phone numbers, email, street address, birth date and identification numbers.
 Suggest technical internship roles only as suggestions requiring my confirmation.
-Return only valid JSON using the structure below. Omit empty placeholder entries.
-No Markdown, explanation or additional fields. Dates: YYYY-MM-DD or YYYY-MM when known.
+Return one complete, pretty-printed JSON object inside a single fenced code block
+labelled json, so I can use the Copy button. Do not put any text outside that block.
+Use the structure below. Omit empty placeholder entries. No additional fields. Dates: YYYY-MM-DD or YYYY-MM when known.
 
 {
   "schema_version": 1,
