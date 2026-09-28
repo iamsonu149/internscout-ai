@@ -1,0 +1,31 @@
+name: Workspace discovery worker
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 3 * * *'
+    - cron: '7,22,37,52 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: internscout-workspace-worker
+  cancel-in-progress: false
+jobs:
+  worker:
+    if: vars.WORKSPACE_WORKER_ENABLED == 'on'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.WORKSPACE_SUPABASE_URL }}
+      SUPABASE_WORKER_KEY: ${{ secrets.WORKSPACE_SUPABASE_WORKER_KEY }}
+      PROVIDER_ENCRYPTION_KEY: ${{ secrets.WORKSPACE_PROVIDER_ENCRYPTION_KEY }}
+      WORKSPACE_WORKER_ENABLED: 'on'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/multi-user-foundation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m scripts.drain_workspace_queue
