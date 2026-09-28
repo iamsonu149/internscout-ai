@@ -69,7 +69,7 @@ def create_workspace_app(settings, store=None):
         }
 
     def destination(value):
-        return value if value in {"/", "/profile", "/connections", "/discovery"} else "/"
+        return value if value in {"/", "/profile", "/connections", "/discovery", "/shared"} else "/"
 
     def finish_login(payload, next_path="/"):
         auth = tokens(payload)
@@ -328,7 +328,10 @@ def create_workspace_app(settings, store=None):
                     document["preferences_to_confirm"] = preferences
                     raw = json.dumps(document)
                 document = parse_profile(raw)
-                if request.form.get("action") in {"save", "form_save"} and request.form.get("confirmed") == "yes":
+                if (
+                    request.form.get("action") in {"save", "form_save"}
+                    and request.form.get("confirmed") == "yes"
+                ):
                     store.save_profile(g.auth["access_token"], g.user["id"], document)
                     return redirect(url_for("index"), code=303)
                 preview = True
@@ -394,46 +397,55 @@ def create_workspace_app(settings, store=None):
 
     @app.route("/discovery", methods=["GET", "POST"])
     def discovery():
-        from app.services.link_import import validate_link
-        from app.services.workspace_profile import matching_profile
+        from app.services.job_preview import validate_import_url
 
         error = None
         ready = settings.workspace_worker_enabled == "on"
         if request.method == "POST":
-            if not ready and request.form.get("action") != "settings":
-                abort(503)
+            action = request.form.get("action", "import")
+            if action not in {"import", "accept"}:
+                abort(400)
             try:
-                if request.form.get("action") == "settings":
-                    limit = int(request.form.get("weekly_limit", "250"))
-                    if not 0 <= limit <= 10000:
-                        raise ValueError("Weekly credit limit must be between 0 and 10,000.")
-                    store.save_discovery_settings(
-                        g.auth["access_token"], g.user["id"], limit, request.form.get("scheduled") == "yes"
+                if action == "accept":
+                    if request.form.get("confirmed") != "yes":
+                        raise ValueError("Review the job details and confirm before saving.")
+                    store.accept_preview(
+                        g.auth["access_token"],
+                        request.form.get("preview_id", ""),
+                        request.form.get("acknowledge") == "yes",
                     )
                 else:
-                    matching_profile(store.profile(g.auth["access_token"], g.user["id"]))
-                    kind = request.form.get("kind", "search")
-                    if kind not in ("search", "import"):
-                        abort(400)
-                    url = (
-                        validate_link(request.form.get("job_url", ""), settings.sources_path)
-                        if kind == "import"
-                        else None
-                    )
-                    store.enqueue(g.auth["access_token"], kind, url)
+                    if not ready:
+                        abort(503)
+                    url = validate_import_url(request.form.get("job_url", ""))
+                    store.enqueue(g.auth["access_token"], "import", url)
                 return redirect(url_for("discovery"), code=303)
             except ValueError as exc:
                 error = str(exc)
             except WorkspaceError:
-                error = "Could not queue this request. Connect Firecrawl first, finish any active task, and allow 15 minutes between requests."
-        tasks = store.tasks(g.auth["access_token"], g.user["id"])
-        config = store.discovery_settings(g.auth["access_token"], g.user["id"])
+                error = "Could not finish this request. Check your connection and profile, and wait for any current import to finish."
         return render_template(
             "workspace/discovery.html",
-            tasks=tasks,
-            config=config,
+            tasks=store.tasks(g.auth["access_token"], g.user["id"]),
+            previews=store.previews(g.auth["access_token"], g.user["id"]),
             error=error,
             ready=ready,
+            csrf=session["csrf"],
+        )
+
+    @app.route("/shared", methods=["GET", "POST"])
+    def shared():
+        if request.method == "POST":
+            store.save_shared(g.auth["access_token"], request.form.get("job_id", ""))
+            return redirect(url_for("index"), code=303)
+        try:
+            page = max(0, min(int(request.args.get("page", 0)), 10000))
+        except ValueError:
+            abort(400)
+        return render_template(
+            "workspace/shared.html",
+            jobs=store.shared_jobs(g.auth["access_token"], page * 50),
+            page=page,
             csrf=session["csrf"],
         )
 

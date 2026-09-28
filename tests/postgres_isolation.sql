@@ -151,3 +151,52 @@ do $$ declare expected integer; begin
  end if;
 end $$;
 select 'Daily schedule time boundary, defaults, opt-out and deduplication passed' as result;
+
+\i /tmp/shared_imports.sql
+insert into public.discovery_tasks(id,user_id,kind,state) values
+ ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','import','COMPLETED'),
+ ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','import','COMPLETED');
+insert into public.job_previews(id,user_id,task_id,fingerprint,payload,verdict) values
+ ('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','shared-test','{"title":"Intern","company":"Verified Co","notes":"SECRET","match":{"private":"SECRET"},"evidence":{"token":"SECRET"}}','VERIFIED'),
+ ('20000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','private-test','{"title":"Private intern","company":"Unknown"}','SUSPICIOUS');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+do $$ begin
+ begin
+  update public.discovery_settings set weekly_limit=10000;
+  raise exception 'User changed fixed budget';
+ exception when insufficient_privilege then null;
+ end;
+ begin
+  perform public.enqueue_discovery('search',null);
+  raise exception 'User started manual search';
+ exception when raise_exception then
+  if SQLERRM!='Search is automatic' then raise; end if;
+ end;
+ begin
+  perform public.accept_job_preview('20000000-0000-0000-0000-000000000002',false);
+  raise exception 'Warning bypassed';
+ exception when raise_exception then
+  if SQLERRM!='Acknowledge warning first' then raise; end if;
+ end;
+ perform public.accept_job_preview('20000000-0000-0000-0000-000000000002',true);
+ perform public.accept_job_preview('20000000-0000-0000-0000-000000000001',false);
+ if (select count(*) from public.shared_jobs)!=1 then raise exception 'Private listing leaked'; end if;
+ if exists(select 1 from public.shared_jobs where payload::text like '%SECRET%') then raise exception 'Private fields leaked'; end if;
+end $$;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
+do $$ declare shared uuid; begin
+ if exists(select 1 from public.job_previews) then raise exception 'Other user preview leaked'; end if;
+ begin
+  perform public.accept_job_preview('20000000-0000-0000-0000-000000000001',true);
+  raise exception 'Other user accepted private preview';
+ exception when raise_exception then
+  if SQLERRM!='Preview unavailable' then raise; end if;
+ end;
+ select id into shared from public.shared_jobs limit 1;
+ perform public.save_shared_job(shared);
+ if not exists(select 1 from public.opportunities where fingerprint='shared-test') then raise exception 'Shared job not saved'; end if;
+ if exists(select 1 from public.opportunities where fingerprint='private-test') then raise exception 'Private job leaked'; end if;
+end $$;
+reset role;
+select 'Fixed policy, staged imports, warning confirmation and catalog isolation passed' as result;

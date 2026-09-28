@@ -21,3 +21,12 @@ User authorized all held changes, with work in small chunks to conserve usage.
 - Existing import only permits known career hosts and saves directly through Pipeline. Must implement staged import/review and safe URL handling before broadening supported links.
 - Shared jobs require migration/RLS and cross-user leakage tests; do NOT expose existing private opportunity payloads wholesale.
 - Ship next chunks to preview and verify before production cutover.
+
+
+## Implementation completed September 28, pending worker credential
+- Hidden fixed budget policy enforced by database constraints and revoked user grants.
+- Manual search and settings routes removed; imports and accept-preview are the only discovery actions.
+- Private extraction previews, warnings and verified shared catalog with owner-only tracking implemented.
+- Tested database migration applied successfully to remote project.
+- GitHub bounded queue worker workflow prepared. Activation needs private Supabase worker credential.
+- Existing profile graduation matching now ignores secondary-school years when an expected degree is present.

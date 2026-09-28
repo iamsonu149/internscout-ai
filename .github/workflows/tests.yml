@@ -35,6 +35,7 @@ jobs:
       - run: cp supabase/migrations/202609260003_schedule.sql /tmp/schedule.sql
       - run: cp supabase/migrations/202609270001_daily_schedule.sql /tmp/daily_schedule.sql
       - run: cp supabase/migrations/202609270002_credit_default.sql /tmp/credit_default.sql
+      - run: cp supabase/migrations/202609270003_shared_imports.sql /tmp/shared_imports.sql
       - run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/postgres_isolation.sql
         env:
           PGPASSWORD: local-ci-only

@@ -29,7 +29,13 @@ def preferred_role(title, roles):
 def matching_profile(document):
     document = parse_profile(json.dumps(document))
     pref = document.get("preferences_to_confirm", {})
-    years = {e.get("graduation_year") for e in document.get("education", []) if e.get("graduation_year")}
+    education = document.get("education", [])
+    target = [e for e in education if e.get("graduation_status") == "expected"]
+    if not target:
+        target = [
+            e for e in education if not re.search(r"class|secondary|high school", e.get("degree") or "", re.I)
+        ]
+    years = {e.get("graduation_year") for e in target if e.get("graduation_year")}
     if len(years) != 1 or not document.get("skills") or not pref.get("desired_roles"):
         raise ValueError(
             "Add skills, one target graduation year and confirmed desired roles to your profile."

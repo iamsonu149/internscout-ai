@@ -59,7 +59,7 @@ def test_worker_disabled_prevents_queueing():
     assert client.post("/discovery", base_url=BASE, data={"csrf": csrf, "kind": "search"}).status_code == 503
 
 
-def test_settings_can_be_saved_before_worker_activation():
+def test_budget_settings_cannot_be_changed_by_browser():
     app, settings, store = setup()
     saved = []
     store.save_discovery_settings = lambda token, uid, limit, enabled: saved.append((uid, limit, enabled))
@@ -75,8 +75,8 @@ def test_settings_can_be_saved_before_worker_activation():
             "scheduled": "yes",
         },
     )
-    assert response.status_code == 303
-    assert saved == [("alice", 100, True)]
+    assert response.status_code == 400
+    assert saved == []
 
 
 def test_budget_fail_closed():
@@ -154,18 +154,20 @@ def test_worker_import_uses_only_claimed_users_key_and_persists(monkeypatch):
 
     monkeypatch.setattr("app.workspace_worker.Firecrawl", Firecrawl)
     monkeypatch.setattr(
-        "app.services.pipeline.extract",
+        "app.services.job_preview.extract",
         lambda *args: job(
             description="Build Python Flask SQL REST APIs for undergraduate students. " * 4,
             graduation_requirement="2027 graduates",
             evidence={"public_api": True, "active": True},
         ),
     )
+    monkeypatch.setattr("app.services.job_preview.validate_import_url", lambda value, **kwargs: value)
     settings = Settings(supabase_worker_key="worker-secret", provider_encryption_key=secret)
     store = Store()
     result = work_once(settings, store)
     assert result["state"] == "COMPLETED"
-    assert any(path.endswith("opportunities") for path, _ in store.writes)
+    assert any(path.endswith("job_previews") for path, _ in store.writes)
+    assert not any(path.endswith("opportunities") for path, _ in store.writes)
     assert "alice-firecrawl-key" not in json.dumps(store.writes)
 
 

@@ -26,7 +26,7 @@ def work_once(settings, store=None):
     owner = task["user_id"]
     try:
         document = store.profile(None, owner)
-        profile = matching_profile(document)
+        profile = matching_profile(document) if task["kind"] == "search" else {}
         connections = store.call(
             "GET",
             "/rest/v1/provider_connections",
@@ -62,7 +62,31 @@ def work_once(settings, store=None):
                 runtime, firecrawl=Firecrawl(key, budget=budget), repository=repo, credit_budget=budget
             )
             if task["kind"] == "import":
-                result = pipeline.import_url(task["job_url"], sync=False)
+                from datetime import datetime, timedelta, timezone
+
+                from app.services.job_preview import inspect_import
+
+                previous = store.call(
+                    "GET",
+                    "/rest/v1/job_previews",
+                    params={
+                        "user_id": f"eq.{owner}",
+                        "payload->>source_url": f"eq.{task['job_url']}",
+                        "created_at": "gt." + (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(),
+                        "order": "created_at.desc",
+                        "limit": 1,
+                    },
+                )
+                if previous:
+                    preview = {k: previous[0][k] for k in ("fingerprint", "payload", "verdict", "warnings")}
+                else:
+                    preview = inspect_import(
+                        Firecrawl(key, budget=budget), task["job_url"], settings.sources_path
+                    )
+                store.call(
+                    "POST", "/rest/v1/job_previews", json={**preview, "user_id": owner, "task_id": task["id"]}
+                )
+                result = {"outcome": "Ready to review. Confirm the details before saving."}
                 state = "COMPLETED"
             else:
                 result = pipeline.run(sync=False)

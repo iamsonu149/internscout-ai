@@ -168,3 +168,40 @@ class WorkspaceStore:
 
     def enqueue(self, token, kind, url=None):
         return self.call("POST", "/rest/v1/rpc/enqueue_discovery", token, json={"p_kind": kind, "p_url": url})
+
+    def previews(self, token, user_id):
+        return self.call(
+            "GET",
+            "/rest/v1/job_previews",
+            token,
+            params={
+                "user_id": f"eq.{user_id}",
+                "saved_at": "is.null",
+                "order": "created_at.desc",
+                "limit": 20,
+            },
+        )
+
+    def accept_preview(self, token, preview_id, acknowledge):
+        return self.call(
+            "POST",
+            "/rest/v1/rpc/accept_job_preview",
+            token,
+            json={"p_preview": preview_id, "p_acknowledge": acknowledge},
+        )
+
+    def shared_jobs(self, token, offset=0):
+        return self.call(
+            "GET",
+            "/rest/v1/shared_jobs",
+            token,
+            params={
+                "select": "id,payload,updated_at",
+                "order": "updated_at.desc",
+                "limit": 50,
+                "offset": offset,
+            },
+        )
+
+    def save_shared(self, token, job_id):
+        return self.call("POST", "/rest/v1/rpc/save_shared_job", token, json={"p_job": job_id})

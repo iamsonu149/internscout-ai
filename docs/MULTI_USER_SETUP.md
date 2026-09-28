@@ -89,7 +89,7 @@ the durable queue every minute while idle; stop with Ctrl+C. A process host must
 keep it running for schedules to work. `python main.py worker-once` handles one
 task for diagnostics. No worker has been provisioned or started in production yet.
 Only after testing the worker should the web deployment also set
-WORKSPACE_WORKER_ENABLED=on. Until then its submit/settings forms are disabled.
+WORKSPACE_WORKER_ENABLED=on. Until then imports are disabled. Budget and schedule controls are not exposed to users.
 
 The worker reserves credits atomically before Firecrawl requests; budget failures
 prevent paid calls. Ambiguous failures retain reservations. Credentials are bound
@@ -120,3 +120,28 @@ References:
 - https://supabase.com/docs/guides/auth/auth-email-passwordless
 - https://supabase.com/docs/guides/auth/auth-smtp
 - https://supabase.com/docs/guides/database/postgres/row-level-security
+
+
+## Fixed policy and reviewed imports (September 28)
+Apply `202609270003_shared_imports.sql` after the five earlier migrations.
+Every workspace has a database-enforced 250-credit rolling-seven-day allowance and
+an automatic daily schedule from 09:00 IST. Authenticated users cannot read/change
+settings or enqueue manual searches. The ledger is preserved during migration.
+
+Imports stage a private preview. A user must review before save; unverified or
+suspicious company evidence requires a separate warning acknowledgment and stays
+private. Verified company/board identity plus verified job evidence permits sharing
+only allowlisted job facts. Profiles, tracking, notes, match data, and submitter
+identity are not published. A shared job can be saved into another user's private
+workspace. Structured job data is preferred; limited HTML extraction is always
+unverified and private. PDF parsing stays disabled. No company is guaranteed fraud-free.
+
+The GitHub workflow `.github/workflows/workspace_worker.yml` runs daily at 03:30 UTC
+(09:00 IST), with quarter-hour queue checks for imports and delayed work. GitHub
+schedules can be delayed; exact start time is not guaranteed. It must exist on the
+default branch to receive schedule events. The worker checks out the feature branch
+until production cutover. Repository variable WORKSPACE_WORKER_ENABLED gates execution.
+Secrets: WORKSPACE_SUPABASE_URL, WORKSPACE_SUPABASE_WORKER_KEY,
+WORKSPACE_PROVIDER_ENCRYPTION_KEY. The service key never belongs in web deployment.
+Provision/test these before enabling web imports. Each invocation drains at most
+15 minutes; durable pending tasks wait for the next run. Review Actions usage when scaling.

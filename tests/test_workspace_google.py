@@ -107,6 +107,7 @@ def test_navigation_after_login_and_return_to_requested_page():
     app, settings, store = setup()
     store.connections = lambda token, uid: []
     store.discovery_settings = lambda token, uid: {"weekly_limit": 100, "schedule_enabled": False}
+    store.previews = lambda *args: []
     store.tasks = lambda token, uid: []
     client = app.test_client()
     assert "next=/connections" in client.get("/connections", base_url=BASE).location
