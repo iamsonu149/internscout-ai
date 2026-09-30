@@ -2,10 +2,22 @@
 {% macro field(name, spec, value, title) %}
 {% set kind = spec.get('type') %}
 {% if kind == 'object' %}
+{% if name == 'optional_preferences' %}
+<details><summary>{{ title }}</summary><div style="margin-top:1rem;">{% for key, child in spec.properties.items() %}{{ field(name ~ '.' ~ key if name else key, child, (value or {}).get(key), key|replace('_',' ')|capitalize) }}{% endfor %}</div></details>
+{% else %}
 <fieldset><legend>{{ title }}</legend>{% for key, child in spec.properties.items() %}{{ field(name ~ '.' ~ key if name else key, child, (value or {}).get(key), key|replace('_',' ')|capitalize) }}{% endfor %}</fieldset>
+{% endif %}
 {% elif kind == 'array' and spec['items'].get('type') == 'object' %}
 <details {% if value %}open{% endif %}><summary>{{ title }}</summary><p class="muted">Review each entry. Use the blank entry to add another; clear an entry to remove it.</p>
 {% for item in (value or []) + ([{}] if (value or [])|length < spec.maxItems else []) %}{{ field(name ~ '.' ~ loop.index0, spec['items'], item, title ~ ' ' ~ loop.index) }}{% endfor %}</details>
+{% elif kind == 'array' and 'enum' in spec.get('items', {}) %}
+<fieldset style="margin-bottom:1rem;"><legend>{{ title }}</legend>
+<div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.5rem;">
+{% for option in spec['items'].enum %}
+<label class="check" style="font-weight:normal; margin-bottom:0;"><input type="checkbox" name="{{ name }}" value="{{ option }}" {% if value and option in value %}checked{% endif %}>{{ option|capitalize }}</label>
+{% endfor %}
+</div>
+</fieldset>
 {% elif kind == 'array' %}
 <label>{{ title }} <span class="muted">(separate with commas)</span><textarea name="{{ name }}" rows="2" maxlength="20000">{{ (value or [])|join(', ') }}</textarea></label>
 {% elif 'enum' in spec %}
@@ -18,13 +30,52 @@
 <label>{{ title }}{% if spec.get('maxLength', 200) > 200 %}<textarea name="{{ name }}" rows="3" maxlength="{{ spec.maxLength }}">{{ value or '' }}</textarea>{% else %}<input name="{{ name }}" value="{{ value or '' }}" maxlength="{{ spec.get('maxLength', 200) }}">{% endif %}</label>
 {% endif %}
 {% endmacro %}
+{% block header_title %}My profile{% endblock %}
 {% block body %}
-<p class="eyebrow">YOUR EXPERIENCE, IN YOUR WORDS</p><h1>Your profile</h1><p>Paste your AI output to fill the form, or enter your details yourself. Nothing is saved until you verify it.</p>
+<div class="heading">
+  <div>
+    <div class="eyebrow">YOUR EXPERIENCE, IN YOUR WORDS</div>
+    <h1>Your profile<span>.</span></h1>
+    <p>Nothing is saved until you review and verify your details.</p>
+  </div>
+</div>
 {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
-<div class="profile-grid"><section class="card"><h2>Use your resume</h2><ol><li><a href="/profile/prompt" target="_blank" rel="noopener">Open the extraction prompt</a> and copy it.</li><li>Attach your resume to your preferred AI assistant and paste the prompt.</li><li>Use Copy on its JSON code block, then paste the output below.</li></ol><p class="muted">Review your AI provider?s privacy settings before uploading. InternScout receives only the output you paste.</p>
-<form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><label for="document">Paste your AI output here</label><textarea id="document" name="document" rows="12" maxlength="50000" required spellcheck="false" placeholder="Paste the copied AI response here">{{ raw if error and not preview else '' }}</textarea><button name="action" value="review">Fill my profile</button></form></section>
-<section class="card"><h2>Review and edit your details</h2>{% if preview %}<p class="notice">Your details are ready to review. Correct anything below before saving.</p>{% endif %}
-<form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="form_save">
-{% for key, spec in schema.properties.items() if key != 'schema_version' %}{{ field(key, spec, document.get(key), key|replace('_',' ')|capitalize) }}{% endfor %}
-<label class="check"><input type="checkbox" name="confirmed" value="yes" required>I have reviewed and verified that all my information is correct.</label><button>Save my profile</button></form></section></div>
+<div class="profile-grid">
+<section class="card" style="padding:2rem;">
+  <h2>Upload your resume</h2>
+  <p>Resume text is processed by our AI providers. Review your details before saving.</p>
+  <form id="workspace-resume-upload" method="post" style="margin-top:1.5rem;">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="upload">
+    <input type="hidden" name="resume_text" id="resume-text-field" value="">
+    <label for="resume" style="font-weight:600; display:block; margin-bottom:0.5rem;">Resume PDF</label>
+    <div style="display:flex; gap:1rem;">
+      <input id="resume" type="file" name="resume" accept=".pdf,application/pdf" required style="flex:1;">
+      <button type="submit" class="button primary">Upload and fill profile</button>
+    </div>
+    <p id="upload-status" role="status" aria-live="polite" style="margin-top:1rem;"></p>
+  </form>
+</section>
+<section class="card" style="padding:2rem;">
+  <h2>Review and edit your details</h2>
+  {% if preview %}<p class="notice">Your details are ready to review. Correct anything below before saving.</p>{% endif %}
+  <form method="post" style="margin-top:1.5rem;">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="form_save">
+{% for key, spec in schema.properties.items() if key != 'schema_version' %}
+    {% if key in ['pg_college_name', 'pg_degree'] and not document.get('pg_college_name') and not document.get('pg_degree') %}
+    {% else %}
+        {{ field(key, spec, document.get(key), key|replace('_',' ')|capitalize) }}
+    {% endif %}
+{% endfor %}
+<label class="check" style="margin-top:1.5rem; font-weight:normal;">
+  <input type="checkbox" name="confirmed" value="yes" required>I have reviewed and verified that all my information is correct.
+</label>
+<div style="margin-top:1rem;">
+  <button class="button primary">Save my profile</button>
+</div>
+</form>
+</section>
+</div>
+<script src="{{ url_for('static', filename='workspace-resume.js') }}" defer></script>
 {% endblock %}

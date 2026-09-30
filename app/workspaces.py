@@ -294,48 +294,49 @@ def create_workspace_app(settings, store=None):
 
     @app.get("/")
     def index():
-        profile = store.profile(g.auth["access_token"], g.user["id"])
+        from app.services.dashboard_feed import safe_url
+        from app.services.workspace_dashboard import dashboard_view
+        from app.services.workspace_profile import matching_profile
+
+        token, owner = g.auth["access_token"], g.user["id"]
+        profile = store.profile(token, owner) or {}
+        g.profile = profile
         try:
             page = max(0, min(int(request.args.get("page", 0)), 10000))
         except ValueError:
             abort(400)
-        screened = request.args.get("view") == "screened"
-        view = request.args.get("view", "ALL")
-        query = request.args.get("q", "")
-        sort = request.args.get("sort", "match")
-        
-        counts = {'NEW': '?', 'STRONG': '?', 'VERIFIED': '?', 'APPLIED': '?'}
-        total = '?'
-        try:
-            from app.services.workspace_dashboard import dashboard_view
-            rows = store.dashboard_rows(g.auth["access_token"], g.user["id"])
-            dash_data = dashboard_view(rows, view, query, sort, page)
-            counts = dash_data["counts"]
-            total = dash_data["total"]
-        except WorkspaceError:
-            pass
-            
-        jobs = store.opportunities(g.auth["access_token"], g.user["id"], page * 50, screened)
-        from app.services.dashboard_feed import safe_url
-
+        query = request.args.get("q", "")[:200]
+        sort = "recent" if request.args.get("sort") == "recent" else "match"
+        data = dashboard_view(store.dashboard_rows(token, owner),
+                              request.args.get("view", "ALL"), query, sort, page)
+        jobs = store.opportunity_page(token, owner, data.pop("ids"))
         for item in jobs:
             item["safe_application_url"] = safe_url(
                 item["payload"].get("application_url") or item["payload"].get("source_url")
             )
+        connected = any(row.get("provider") == "firecrawl" for row in store.connections(token, owner))
+        try:
+            matching_profile(profile)
+            profile_ready = True
+        except (ValueError, TypeError, AttributeError):
+            profile_ready = False
+        searches = [row for row in store.tasks(token, owner) if row.get("kind") == "search"]
+        if not profile_ready:
+            empty_title, empty_text = "Complete your matching profile", "Review your skills, desired roles and eligibility preferences to enable matching."
+            empty_url, empty_action = "/profile", "Review my profile"
+        elif not connected:
+            empty_title, empty_text = "Connect your search provider", "Connect Firecrawl to enable discovery for your workspace."
+            empty_url, empty_action = "/connections", "Manage connections"
+        else:
+            empty_title, empty_text = "No opportunities in this view yet", "Your profile and connection are ready. New matches appear after a successful discovery run; you can also save a job link."
+            empty_url, empty_action = "/discovery", "Save a job"
         return render_template(
-            "workspace/home.html",
-            jobs=jobs,
-            profile=profile,
-            page=page,
-            email=g.user.get("email", ""),
-            csrf=session["csrf"],
-            statuses=sorted(STATUSES),
-            screened=screened,
-            counts=counts,
-            total=total,
-            view=view,
-            query=query,
-            sort=sort,
+            "workspace/home.html", **data, jobs=jobs, profile=profile, page=page,
+            csrf=session["csrf"], statuses=sorted(STATUSES), query=query, sort=sort,
+            screened=data["view"] == "SCREENED", connected=connected,
+            profile_ready=profile_ready, worker_enabled=settings.workspace_worker_enabled == "on",
+            latest=searches[0] if searches else None,
+            empty_title=empty_title, empty_text=empty_text, empty_url=empty_url, empty_action=empty_action,
         )
 
     @app.route("/profile", methods=["GET", "POST"])
@@ -347,8 +348,20 @@ def create_workspace_app(settings, store=None):
             try:
                 existing = store.profile(g.auth["access_token"], g.user["id"]) or dict(EMPTY_PROFILE)
                 if request.form.get("action") == "upload":
-                    from app.services.resume_upload import extract_pdf, parse_resume, workspace_profile
-                    extracted = parse_resume(extract_pdf(request.files.get("resume")), settings)
+                    from app.services.resume_upload import (
+                        MAX_TEXT,
+                        extract_pdf,
+                        parse_resume,
+                        workspace_profile,
+                    )
+                    resume_text = request.form.get("resume_text", "").strip()
+                    if resume_text:
+                        # Text was extracted client-side (avoids Vercel body-size limit)
+                        if len(resume_text) > MAX_TEXT:
+                            raise ValueError("Resume text exceeds the maximum allowed length.")
+                    else:
+                        resume_text = extract_pdf(request.files.get("resume"))
+                    extracted = parse_resume(resume_text, settings)
                     document = workspace_profile(extracted, existing)
                     raw = json.dumps(document)
                 elif request.form.get("action") == "form_save":
