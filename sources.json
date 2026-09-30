@@ -37,6 +37,15 @@
     }
   ],
   "official_domains": {},
+  "organization_references": [
+    {
+      "company": "Weekday",
+      "title": "Weekday in Y Combinator's company directory",
+      "url": "https://www.ycombinator.com/companies/weekday/jobs",
+      "checked_on": "2026-09-30",
+      "scope": "A business named Weekday is independently listed as a recruiting company. This supports its existence, but does not establish ownership of this posting or identify its client."
+    }
+  ],
   "unavailable_boards": [
     {
       "type": "greenhouse",

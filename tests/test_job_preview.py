@@ -41,6 +41,15 @@ def test_import_policy_and_spoofed_company_stays_private(monkeypatch, tmp_path):
     result = inspect_import(Fetch(), "https://jobs.lever.co/real-company/123", str(source))
     assert result["verdict"] == "VERIFIED"
     assert "evidence" not in result["payload"] and "match" not in result["payload"]
+    original_extract = extract
+    def client_extract(page, url):
+        result = original_extract(page, url)
+        result.description += " This role is for one of our clients."
+        return result
+    monkeypatch.setattr("app.services.job_preview.extract", client_extract)
+    client_result = inspect_import(Fetch(), "https://jobs.lever.co/real-company/123", str(source))
+    assert client_result["verdict"] == "UNVERIFIED"
+    assert "client" in client_result["warnings"][0]
     monkeypatch.setattr(
         "app.services.job_preview.socket.getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("127.0.0.1", 443))]
     )

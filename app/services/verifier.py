@@ -14,6 +14,13 @@ ATS_HOSTS = {
 EXPORTABLE = {"VERIFIED_OFFICIAL", "VERIFIED_ATS", "LIKELY_GENUINE"}
 
 
+def same_ats_board(first, second):
+    a, b = urlsplit(first), urlsplit(second)
+    return (a.hostname == b.hostname and a.scheme == b.scheme == "https"
+            and bool(a.path.strip("/"))
+            and a.path.strip("/").split("/")[0] == b.path.strip("/").split("/")[0])
+
+
 def verify(job, official_domains):
     reasons = []
     try:
@@ -26,7 +33,9 @@ def verify(job, official_domains):
         return job
     host, app_host, final_host = (urlsplit(u).hostname for u in (source, application, final))
     if len(job.description.strip()) < 100 or not job.company.strip() or not job.title.strip():
-        reasons.append("Insufficient job-specific content")
+        job.verification_status = "UNVERIFIED"
+        job.verification_reasons = ["Insufficient job-specific content; more evidence is needed"]
+        return job
     if re.search(
         r"(?:pay|payment|deposit).{0,35}(?:registration|application|training) fee|(?:registration|application) fee.{0,20}(?:required|pay)|guaranteed (?:job|placement)",
         job.description,
@@ -41,7 +50,7 @@ def verify(job, official_domains):
         status = (
             "VERIFIED_ATS"
             if (
-                app_host in ATS_HOSTS
+                (host in ATS_HOSTS and same_ats_board(source, application))
                 or official_domains.get(app_host, "").casefold() == job.company.casefold()
             )
             else "UNVERIFIED"
@@ -55,9 +64,12 @@ def verify(job, official_domains):
         job.evidence.get("structured_job")
         and job.evidence.get("page_status") in (200, 201, 202, 203, 204, 206, 304)
         and host == final_host
+        and (host not in ATS_HOSTS or same_ats_board(source, final))
         and (host in ATS_HOSTS or official)
     ):
-        if app_host == host or app_host in ATS_HOSTS:
+        if (host in ATS_HOSTS and same_ats_board(source, application)) or (
+            official and app_host == host
+        ):
             status = "VERIFIED_OFFICIAL" if official else "VERIFIED_ATS"
             reasons.append("Fetched single JobPosting with company, description and application destination")
         else:

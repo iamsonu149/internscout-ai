@@ -12,6 +12,7 @@ from app.models import Job
 from app.services.deduplicator import fingerprint, normalize_url
 from app.services.firecrawl_service import document_url
 from app.services.job_extractor import extract
+from app.services.verification_report import client_posting
 from app.services.verifier import verify
 
 PUBLIC_FIELDS = (
@@ -88,12 +89,14 @@ def inspect_import(firecrawl, url, sources_path):
     )
     verdict = (
         "VERIFIED"
-        if job.verification_status in {"VERIFIED_OFFICIAL", "VERIFIED_ATS"} and configured_company
+        if job.verification_status in {"VERIFIED_OFFICIAL", "VERIFIED_ATS"}
+        and configured_company and not client_posting(job.description)
         else "SUSPICIOUS"
         if job.verification_status == "REJECTED"
         else "UNVERIFIED"
     )
     payload = {k: job.to_dict().get(k) for k in PUBLIC_FIELDS}
+    payload["inspection_version"] = 2
     # Do not expose a dangerous application destination even on a private preview.
     for key in ("source_url", "application_url"):
         try:
@@ -104,7 +107,11 @@ def inspect_import(firecrawl, url, sources_path):
         "fingerprint": fingerprint(job),
         "payload": payload,
         "verdict": verdict,
-        "warnings": (["Company identity could not be independently verified."] + job.verification_reasons)
+        "warnings": ([
+            "This recruiter is advertising for a client whose identity has not been independently established."
+            if client_posting(job.description) else
+            "The company-to-posting link needs more evidence; this does not mean the company is fraudulent."
+        ] + job.verification_reasons)
         if verdict != "VERIFIED"
         else [],
     }

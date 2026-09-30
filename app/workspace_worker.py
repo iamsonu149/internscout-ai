@@ -77,7 +77,7 @@ def work_once(settings, store=None):
                         "limit": 1,
                     },
                 )
-                if previous:
+                if previous and previous[0].get("payload", {}).get("inspection_version") == 2:
                     preview = {k: previous[0][k] for k in ("fingerprint", "payload", "verdict", "warnings")}
                 else:
                     preview = inspect_import(
