@@ -51,7 +51,7 @@ def test_unverified_partial_match_with_missing_application_is_audit_only(tmp_pat
     pipeline.process(job, metrics())
     assert not pipeline.repo.jobs()
     assert pipeline.repo.rejections()[0]["application_url"] is None
-    assert pipeline.repo.rejections()[0]["verification_status"] == "REJECTED"
+    assert pipeline.repo.rejections()[0]["verification_status"] == "UNVERIFIED"
 
 
 class FakeRejected(FakeSheets, RejectedSheets):

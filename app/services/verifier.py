@@ -21,8 +21,34 @@ def same_ats_board(first, second):
             and a.path.strip("/").split("/")[0] == b.path.strip("/").split("/")[0])
 
 
+def risk_evidence(description):
+    """Return bounded quotations; negated safety advice is not a payment demand."""
+    findings = []
+    for sentence in re.split(r"[\n.!?;]+", description):
+        for clause in re.split(r"\b(?:but|however)\b", sentence, flags=re.I):
+            fee = re.search(
+                r"\b(?:pay|payment|deposit)\b.{0,45}\b(?:registration|application|training) fee\b"
+                r"|\b(?:registration|application|training) fee\b.{0,30}\b(?:required|pay|mandatory)\b"
+                r"|\bguaranteed (?:job|placement)\b", clause, re.I,
+            )
+            if not fee:
+                continue
+            prefix = clause[max(0, fee.start()-60):fee.start()]
+            negated = re.search(
+                r"\b(?:never|do not|don't|avoid|beware)\b.{0,45}$|\b(?:no|without)\s*$",
+                prefix, re.I,
+            ) or re.search(r"\b(?:not|never)\s+(?:required|mandatory)\b", fee.group(), re.I)
+            if not negated:
+                findings.append("Potential fee or placement warning: " + clause.strip()[:240])
+    return findings
+
+
 def verify(job, official_domains):
     reasons = []
+    if not job.application_url:
+        job.verification_status = "UNVERIFIED"
+        job.verification_reasons = ["No application link was extracted; its destination could not be checked"]
+        return job
     try:
         source = normalize_url(job.source_url)
         application = normalize_url(job.application_url)
@@ -36,12 +62,7 @@ def verify(job, official_domains):
         job.verification_status = "UNVERIFIED"
         job.verification_reasons = ["Insufficient job-specific content; more evidence is needed"]
         return job
-    if re.search(
-        r"(?:pay|payment|deposit).{0,35}(?:registration|application|training) fee|(?:registration|application) fee.{0,20}(?:required|pay)|guaranteed (?:job|placement)",
-        job.description,
-        re.I,
-    ):
-        reasons.append("Suspicious fee or placement claim")
+    reasons.extend(risk_evidence(job.description))
     configured = official_domains.get(host)
     official = bool(configured and configured.casefold() == job.company.casefold())
     if reasons:

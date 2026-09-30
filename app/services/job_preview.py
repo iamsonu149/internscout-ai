@@ -3,6 +3,7 @@
 import ipaddress
 import json
 import socket
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -90,13 +91,20 @@ def inspect_import(firecrawl, url, sources_path):
     verdict = (
         "VERIFIED"
         if job.verification_status in {"VERIFIED_OFFICIAL", "VERIFIED_ATS"}
-        and configured_company and not client_posting(job.description)
+        and configured_company
         else "SUSPICIOUS"
         if job.verification_status == "REJECTED"
         else "UNVERIFIED"
     )
     payload = {k: job.to_dict().get(k) for k in PUBLIC_FIELDS}
-    payload["inspection_version"] = 2
+    payload["inspection_version"] = 3
+    payload["verification_checked_at"] = datetime.now(timezone.utc).isoformat()
+    payload["company_source_matched"] = configured_company
+    payload["recruiter_client_posting"] = client_posting(job.description)
+    if client_posting(job.description):
+        payload["verification_reasons"] = list(payload["verification_reasons"] or []) + [
+            "Recruiter posting for a client: source checks concern the advertiser, not independent verification of the client. This is not itself a fraud signal."
+        ]
     # Do not expose a dangerous application destination even on a private preview.
     for key in ("source_url", "application_url"):
         try:

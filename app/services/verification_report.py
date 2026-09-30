@@ -4,6 +4,17 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from app.services.deduplicator import normalize_url
+
+
+def evidence_link(value):
+    try:
+        url = normalize_url(value)
+        return url if urlsplit(url).scheme == "https" else None
+    except ValueError:
+        return None
 
 
 def client_posting(description):
@@ -26,15 +37,17 @@ def explain_preview(item, sources_path=None):
     else:
         checks.append("Posting: source ownership or job-specific evidence still needs review.")
     if client:
-        checks.append("Employer: the posting says it is for a client. The recruiter and hiring employer must be checked separately; this review has not independently established the client's identity.")
+        checks.append("Recruiter posting: the ad says it is for a client. Source checks concern the recruiter; the client's identity has not been independently checked. This alone is not a warning sign.")
     checks.append(
         "Company-to-posting link: matched our reviewed company source records."
-        if verified else
+        if verified or job.get("company_source_matched") is True else
         "Company-to-posting link: not independently established by the available evidence. A missing match is not a finding of fraud."
     )
     # Keep actual failure reasons, but replace the old blanket identity message.
     details = [w for w in warnings if w and not w.startswith("Company identity could not")
                and not w.startswith("Fetched single JobPosting")]
+    if job.get("inspection_version") == 3:
+        details = list(job.get("verification_reasons") or [])
     references = []
     if sources_path:
         try:
@@ -52,4 +65,7 @@ def explain_preview(item, sources_path=None):
         "details": details,
         "client_posting": client,
         "references": references,
+        "checked_at": job.get("verification_checked_at"),
+        "source_url": evidence_link(job.get("source_url")),
+        "application_url": evidence_link(job.get("application_url")),
     }
