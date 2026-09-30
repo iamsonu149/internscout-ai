@@ -25,10 +25,19 @@ class Settings:
     google_credentials_json: str = field(default="", repr=False)
     google_oauth_file: str = ""
     llm_api_key: str = field(default="", repr=False)
+    gemini_api_key: str = field(default="", repr=False)
+    groq_api_key: str = field(default="", repr=False)
+    mistral_api_key: str = field(default="", repr=False)
+    github_token: str = field(default="", repr=False)
+    resume_gemini_lite_model: str = "gemini-3.5-flash-lite"
+    resume_gemini_flash_model: str = "gemini-3.8-flash"
+    resume_groq_model: str = "openai/gpt-oss-20b"
+    resume_mistral_model: str = "mistral-small-latest"
     llm_model: str = ""
     llm_base_url: str = ""
     max_llm_calls: int = 0
     dashboard_mode: str = "local"
+    admin_email: str = ""
     dashboard_username: str = "internscout"
     dashboard_password: str = field(default="", repr=False)
     dashboard_secret_key: str = field(default="", repr=False)
@@ -84,6 +93,6 @@ class Settings:
             raise ValueError("Unknown dashboard mode")
         if obj.workspace_backend not in {"personal", "supabase"}:
             raise ValueError("Unknown workspace backend")
-        if obj.dashboard_mode == "local":
+        if obj.dashboard_mode == "local" and not os.getenv("VERCEL"):
             Path(obj.database_path).parent.mkdir(parents=True, exist_ok=True)
         return obj
