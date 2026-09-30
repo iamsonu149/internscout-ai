@@ -1,6 +1,6 @@
 "use strict";
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB local check (generous; only text goes to server)
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB local check (only text goes to server)
 const MAX_TEXT = 12000;
 
 const upload = document.getElementById("workspace-resume-upload");
@@ -35,27 +35,42 @@ upload.addEventListener("submit", async (event) => {
   }
   const btn = upload.querySelector("button");
   btn.disabled = true;
-  status.textContent = "Extracting text from your resume…";
+  status.textContent = "Extracting text from your resume\u2026";
   try {
     const text = await extractPdfText(file);
     if (!text) {
       status.textContent =
         "No extractable text found. Scanned PDFs need OCR; upload a PDF with selectable text.";
+      btn.disabled = false;
       return;
     }
-    status.textContent = "Sending to AI for parsing…";
-    // Write extracted text into the hidden field, then do a plain form submit
-    document.getElementById("resume-text-field").value = text;
-    // Remove the file input so the form doesn't try to send binary data
-    const fileInput = upload.elements.resume;
-    fileInput.removeAttribute("required");
-    fileInput.disabled = true;
-    upload.submit();
+    status.textContent = "Sending to AI for parsing\u2026";
+
+    // Build a plain URL-encoded POST — no binary data at all
+    const params = new URLSearchParams();
+    params.set("csrf", upload.elements.csrf.value);
+    params.set("action", "upload");
+    params.set("resume_text", text);
+
+    const response = await fetch(upload.action || window.location.pathname, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+
+    if (response.redirected) {
+      window.location.href = response.url;
+      return;
+    }
+    // Server returned HTML (profile page with filled-in fields)
+    const html = await response.text();
+    document.open();
+    document.write(html);
+    document.close();
   } catch (err) {
     console.error(err);
     status.textContent =
       "Could not read the PDF in your browser. Try a different PDF or export a fresh copy.";
-  } finally {
     btn.disabled = false;
   }
 });
@@ -63,8 +78,4 @@ upload.addEventListener("submit", async (event) => {
 window.addEventListener("pageshow", () => {
   upload.querySelector("button").disabled = false;
   status.textContent = "";
-  const fileInput = upload.elements.resume;
-  fileInput.disabled = false;
-  fileInput.setAttribute("required", "");
-  document.getElementById("resume-text-field").value = "";
 });
