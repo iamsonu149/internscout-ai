@@ -60,6 +60,8 @@ def create_workspace_app(settings, store=None):
         MAX_CONTENT_LENGTH=100000,
         TRUSTED_HOSTS=[".vercel.app", "localhost", "127.0.0.1"],
     )
+    from app.resume_routes import register_resume_routes
+    register_resume_routes(app, settings)
 
     def tokens(payload):
         return {
@@ -86,10 +88,15 @@ def create_workspace_app(settings, store=None):
         if request.routing_exception is not None:
             return None
         session.setdefault("csrf", secrets.token_urlsafe(32))
+        g.auth = None
+        # Logout must work even if refresh/user lookup is unavailable. Its route
+        # checks CSRF itself and offers confirmation for stale forms.
+        if request.endpoint == "logout":
+            return None
         if request.method == "POST" and not secrets.compare_digest(
             request.form.get("csrf", ""), session["csrf"]
         ):
-            abort(400)
+            return "Session expired or invalid form submission. Please go back, refresh the page, and try again.", 400
         g.auth = None
         if request.endpoint in {
             "static",
@@ -109,8 +116,23 @@ def create_workspace_app(settings, store=None):
                 g.auth = tokens(store.refresh(g.auth["refresh_token"]))
                 g.set_auth = g.auth
             g.user = store.user(g.auth["access_token"])
+            g.profile = {}  # Initialize to prevent UndefinedError in error.html
             if not g.user.get("id"):
                 raise SessionExpired()
+            
+            try:
+                blocked = store.call("GET", "/rest/v1/blocked_users", g.auth["access_token"], params={"user_id": f"eq.{g.user['id']}"})
+                if blocked:
+                    if request.endpoint not in {"logout", "login"}:
+                        g.clear_auth = True
+                        return "Your account has been blocked.", 403
+            except WorkspaceError:
+                # If migration hasn't been run yet, assume not blocked
+                pass
+
+            g.is_admin = False
+            if settings.admin_email and g.user.get("email", "").lower() == settings.admin_email.lower():
+                g.is_admin = True
         except (InvalidToken, ValueError, KeyError, SessionExpired):
             g.auth = None
             g.clear_auth = True
@@ -251,10 +273,20 @@ def create_workspace_app(settings, store=None):
                 error=error_message,
             ), 400
 
-    @app.post("/logout")
+    @app.route("/logout", methods=["GET", "POST"])
     def logout():
+        if request.method != "POST" or not secrets.compare_digest(
+            request.form.get("csrf", ""), session["csrf"]
+        ):
+            return render_template("workspace/logout.html", csrf=session["csrf"])
         try:
-            store.logout(g.auth["access_token"])
+            auth = json.loads(cipher.decrypt(request.cookies.get(COOKIE, "").encode(), ttl=30 * 86400))
+            if isinstance(auth, dict) and isinstance(auth.get("access_token"), str):
+                store.logout(auth["access_token"])
+        except (InvalidToken, ValueError, KeyError, WorkspaceError):
+            # Clear this browser's credentials even when the provider is down
+            # or the encrypted cookie is no longer usable. Never refresh here.
+            pass
         finally:
             session.clear()
             g.clear_auth = True
@@ -268,6 +300,21 @@ def create_workspace_app(settings, store=None):
         except ValueError:
             abort(400)
         screened = request.args.get("view") == "screened"
+        view = request.args.get("view", "ALL")
+        query = request.args.get("q", "")
+        sort = request.args.get("sort", "match")
+        
+        counts = {'NEW': '?', 'STRONG': '?', 'VERIFIED': '?', 'APPLIED': '?'}
+        total = '?'
+        try:
+            from app.services.workspace_dashboard import dashboard_view
+            rows = store.dashboard_rows(g.auth["access_token"], g.user["id"])
+            dash_data = dashboard_view(rows, view, query, sort, page)
+            counts = dash_data["counts"]
+            total = dash_data["total"]
+        except WorkspaceError:
+            pass
+            
         jobs = store.opportunities(g.auth["access_token"], g.user["id"], page * 50, screened)
         from app.services.dashboard_feed import safe_url
 
@@ -284,6 +331,11 @@ def create_workspace_app(settings, store=None):
             csrf=session["csrf"],
             statuses=sorted(STATUSES),
             screened=screened,
+            counts=counts,
+            total=total,
+            view=view,
+            query=query,
+            sort=sort,
         )
 
     @app.route("/profile", methods=["GET", "POST"])
@@ -293,11 +345,17 @@ def create_workspace_app(settings, store=None):
         if request.method == "POST":
             raw = request.form.get("document", "")
             try:
-                if request.form.get("action") == "form_save":
-                    document = profile_from_form(request.form)
+                existing = store.profile(g.auth["access_token"], g.user["id"]) or dict(EMPTY_PROFILE)
+                if request.form.get("action") == "upload":
+                    from app.services.resume_upload import extract_pdf, parse_resume, workspace_profile
+                    extracted = parse_resume(extract_pdf(request.files.get("resume")), settings)
+                    document = workspace_profile(extracted, existing)
                     raw = json.dumps(document)
-                if request.form.get("action") == "manual":
-                    document = store.profile(g.auth["access_token"], g.user["id"]) or dict(EMPTY_PROFILE)
+                elif request.form.get("action") == "form_save":
+                    document = profile_from_form(request.form, existing)
+                    raw = json.dumps(document)
+                elif request.form.get("action") == "manual":
+                    document = dict(existing)
 
                     def terms(name):
                         return [
@@ -339,6 +397,13 @@ def create_workspace_app(settings, store=None):
             except ValueError as exc:
                 error, status = str(exc), 400
                 document = locals().get("document", {})
+            except Exception as exc:
+                from app.services.resume_upload import ProvidersExhausted
+                if isinstance(exc, ProvidersExhausted):
+                    error, status = str(exc), 503
+                    document = locals().get("document", {})
+                else:
+                    raise
         else:
             document = store.profile(g.auth["access_token"], g.user["id"]) or EMPTY_PROFILE
             raw = ""
@@ -459,11 +524,73 @@ def create_workspace_app(settings, store=None):
 
     @app.post("/jobs/<uuid:job_id>/tracking")
     def tracking(job_id):
+        action = request.form.get("action", "save")
+        if action == "remove":
+            store.remove_opportunity(g.auth["access_token"], g.user["id"], str(job_id))
+            from flask import flash
+            flash(f"Job removed. <form method='post' action='/jobs/{job_id}/undo' style='display:inline'><input type='hidden' name='csrf' value='{session.get('csrf')}'><button class='button secondary' style='padding:0.25rem 0.5rem; font-size:0.875rem'>Undo</button></form>", "success")
+            return redirect(url_for("index"), code=303)
         status, notes = request.form.get("status", ""), request.form.get("notes", "")
         if status not in STATUSES or len(notes) > 5000:
             abort(400)
         if not store.track(g.auth["access_token"], g.user["id"], str(job_id), status, notes):
             abort(404)
+        return redirect(url_for("index"), code=303)
+
+    @app.post("/jobs/<uuid:job_id>/undo")
+    def undo_remove(job_id):
+        store.restore_opportunity(g.auth["access_token"], g.user["id"], str(job_id))
+        return redirect(url_for("index"), code=303)
+
+
+    @app.get("/admin")
+    def admin_dashboard():
+        if not getattr(g, "is_admin", False):
+            abort(403)
+        admin_store = WorkspaceStore(settings.supabase_url, settings.supabase_worker_key)
+        g.profile = store.profile(g.auth["access_token"], g.user["id"]) or {}
+        overview = admin_store.call("POST", "/rest/v1/rpc/admin_get_overview", json={}) or {}
+        users = admin_store.call("POST", "/rest/v1/rpc/admin_list_users", json={}) or []
+        feedback = admin_store.call("GET", "/rest/v1/feedback", params={"order": "created_at.desc", "limit": 50}) or []
+        return render_template("workspace/admin.html", overview=overview, users=users, feedback=feedback, admin_email=settings.admin_email, csrf=session.get("csrf"))
+
+    @app.post("/admin/users/<uuid:target_id>/block")
+    def admin_block_user(target_id):
+        if not getattr(g, "is_admin", False):
+            abort(403)
+        admin_store = WorkspaceStore(settings.supabase_url, settings.supabase_worker_key)
+        action = request.form.get("action")
+        if action == "block":
+            admin_store.call("POST", "/rest/v1/blocked_users", json={"user_id": str(target_id), "reason": "Blocked by admin"})
+        else:
+            admin_store.call("DELETE", "/rest/v1/blocked_users", params={"user_id": f"eq.{target_id}"})
+        return redirect("/admin", code=303)
+
+    @app.post("/admin/feedback/<uuid:feedback_id>")
+    def admin_update_feedback(feedback_id):
+        if not getattr(g, "is_admin", False):
+            abort(403)
+        admin_store = WorkspaceStore(settings.supabase_url, settings.supabase_worker_key)
+        status = request.form.get("status")
+        if status in {"NEW", "IN_PROGRESS", "RESOLVED"}:
+            admin_store.call("PATCH", "/rest/v1/feedback", params={"id": f"eq.{feedback_id}"}, json={"status": status})
+        return redirect("/admin", code=303)
+
+    @app.get("/feedback")
+    def feedback_form():
+        g.profile = store.profile(g.auth["access_token"], g.user["id"]) or {}
+        return render_template("workspace/feedback.html", csrf=session.get("csrf"))
+
+    @app.post("/feedback")
+    def submit_feedback():
+        subject = request.form.get("subject", "").strip()
+        message = request.form.get("message", "").strip()
+        url = request.form.get("url", "").strip()
+        if not subject or not message:
+            return render_template("workspace/feedback.html", error="Subject and message are required.", csrf=session.get("csrf"))
+        store.call("POST", "/rest/v1/feedback", g.auth["access_token"], json={"user_id": g.user["id"], "subject": subject, "message": message, "url": url})
+        from flask import flash
+        flash("Thank you for your feedback!", "success")
         return redirect(url_for("index"), code=303)
 
     return app
